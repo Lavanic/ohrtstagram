@@ -80,7 +80,7 @@ static void OhrtWelcome(void) {
     UIViewController *top = topMostController();
     if (!top) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"ohrtstagram"
-                                                                   message:@"Settings: on your profile, hold the three lines at the top right."
+                                                                   message:@"Settings: on your profile, hold the three lines at the top right. Or hold four fingers anywhere."
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [top presentViewController:alert animated:YES completion:^{

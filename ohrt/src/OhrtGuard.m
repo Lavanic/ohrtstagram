@@ -9,16 +9,22 @@
 //
 // The counting is in OhrtLogic.h, where it is tested. This file feeds it
 // the app's events and keeps its one number between runs.
+//
+// The same can be asked for by hand: the app's page in the iPhone's
+// Settings app has a switch, "Start with everything off", for when the app
+// will not stay up long enough to count anything.
 #import "../../src/InstagramHeaders.h"
 #import "Ohrt.h"
 #import "OhrtLogic.h"
 
 static NSString *const kOhrtUnfinishedKey = @"ohrt_unfinished_launches";
+static NSString *const kOhrtForceSafeKey = @"ohrt_force_safe";
 
 // Settled means this long at the front without dying.
 static const NSTimeInterval kOhrtSettleAfter = 15;
 
 static OhrtGuard gOhrtGuard;
+static BOOL gOhrtForced;
 
 // Applies one event to the guard and writes its number out if it moved.
 static void OhrtGuardStep(void (^event)(void)) {
@@ -38,9 +44,11 @@ BOOL OhrtSafeLaunch(void) {
         OhrtGuardStep(^{
             OhrtGuardStart(&gOhrtGuard, [[NSUserDefaults standardUserDefaults] integerForKey:kOhrtUnfinishedKey]);
         });
+        gOhrtForced = [[NSUserDefaults standardUserDefaults] boolForKey:kOhrtForceSafeKey];
         if (gOhrtGuard.safe) OhrtLog(@"guard: %ld starts in a row did not settle; this one runs with every switch off", gOhrtGuard.before);
+        if (gOhrtForced) OhrtLog(@"guard: started with every switch off, as set in the Settings app");
     });
-    return gOhrtGuard.safe;
+    return gOhrtGuard.safe || gOhrtForced;
 }
 
 BOOL OhrtFeature(NSString *key) {
@@ -82,8 +90,12 @@ BOOL OhrtTry(NSString *feature, void (NS_NOESCAPE ^piece)(void)) {
 static void OhrtSaySafe(void) {
     UIViewController *top = topMostController();
     if (!top) return;
+    NSString *way = @"on your profile, hold the three lines at the top right, or hold four fingers anywhere";
+    NSString *message = gOhrtForced
+        ? [NSString stringWithFormat:@"\"Start with everything off\" is switched on for ohrtstagram in the Settings app, so this is plain Instagram. Your settings are kept. Change what you need to (%@), switch it off again in Settings, then restart.", way]
+        : [NSString stringWithFormat:@"The last two starts ended before the app settled, so this one is plain Instagram. Your settings are kept. Turn off what you changed last (%@), then restart.", way];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"ohrtstagram is running with its changes off"
-                                                                   message:@"The last two starts ended before the app settled, so this one is plain Instagram. Your settings are kept. Turn off what you changed last (on your profile, hold the three lines at the top right), then restart."
+                                                                   message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [top presentViewController:alert animated:YES completion:nil];
@@ -110,7 +122,7 @@ __attribute__((constructor)) static void OhrtGuardLoad(void) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kOhrtSettleAfter * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             OhrtLaunchSettled();
         });
-        if (!gOhrtGuard.safe) return;
+        if (!OhrtSafeLaunch()) return;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             OhrtSaySafe();
         });
