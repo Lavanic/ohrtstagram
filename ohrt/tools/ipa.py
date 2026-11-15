@@ -18,6 +18,7 @@ import zipfile
 LC_LOAD_DYLIB = 0xC
 LC_LOAD_WEAK_DYLIB = 0x80000018
 LC_ENCRYPTION_INFO_64 = 0x2C
+LC_RPATH = 0x8000001C
 MH_MAGIC_64 = 0xFEEDFACF
 FAT_MAGIC = 0xCAFEBABE
 CPU_ARM64 = 0x0100000C
@@ -72,6 +73,55 @@ def linked_libraries(data):
             start = struct.unpack_from("<I", payload, 8)[0]
             names.append(payload[start:].split(b"\0", 1)[0].decode())
     return names
+
+
+def run_paths(data):
+    paths = []
+    for command, payload in load_commands(data):
+        if command == LC_RPATH:
+            start = struct.unpack_from("<I", payload, 8)[0]
+            paths.append(payload[start:].split(b"\0", 1)[0].decode())
+    return paths
+
+
+def unresolved(archive, root, names):
+    """Libraries the app or what was injected into it links against but would not find.
+
+    A library that cannot be found stops the app before it has started,
+    so this is checked here and not left for the phone to report.
+    """
+    present = set(names)
+    main = main_binary(archive, root)
+    main_paths = run_paths(main)
+    missing = []
+    binaries = [(root.rstrip("/").rsplit("/", 1)[-1], main)]
+    for name in names:
+        inside = name[len(root):]
+        if inside.startswith("Frameworks/") and (inside.endswith(".dylib") or inside.count("/") == 2 and inside.split("/")[1].endswith(".framework")
+                                                  and inside.split("/")[2] == inside.split("/")[1][:-len(".framework")]):
+            binaries.append((inside, archive.read(name)))
+    for label, data in binaries:
+        if len(data) < 32 or struct.unpack_from("<I", arm64_slice(data))[0] != MH_MAGIC_64:
+            continue
+        own = run_paths(data)
+        for library in linked_libraries(data):
+            if not library.startswith("@rpath/"):
+                continue
+            found = False
+            for path in main_paths + own:
+                if path.startswith("@executable_path"):
+                    candidate = root + path[len("@executable_path"):].strip("/") + "/" + library[len("@rpath/"):]
+                    found = found or candidate.replace("//", "/") in present
+                elif path.startswith("@loader_path"):
+                    folder = root + label.rsplit("/", 1)[0] + "/" if "/" in label else root
+                    candidate = folder + path[len("@loader_path"):].strip("/") + "/" + library[len("@rpath/"):]
+                    found = found or candidate.replace("//", "/") in present
+                elif path.startswith("/"):
+                    # A system folder: the phone has it.
+                    found = True
+            if not found:
+                missing.append(f"{label} links {library}, which is not in the app")
+    return missing
 
 
 def encrypted(data):
@@ -190,8 +240,8 @@ def command_check(path, name, bundle_id, *dylibs):
         root = app_root(archive)
         info = info_plist(archive, root)
         libraries = linked_libraries(main_binary(archive, root))
+        problems = unresolved(archive, root, names)
 
-    problems = []
     if info.get("CFBundleDisplayName") != name:
         problems.append(f"the name is {info.get('CFBundleDisplayName')!r}, not {name!r}")
     if info.get("CFBundleIdentifier") != bundle_id:
