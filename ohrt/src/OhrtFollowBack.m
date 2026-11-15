@@ -20,9 +20,14 @@
 #import "OhrtLogic.h"
 
 static const NSTimeInterval kOhrtBetweenChecks = 3 * 60 * 60;
+// A check that was started and did not finish has still read part of the
+// lists, so the next one waits too, though not as long.
+static const NSTimeInterval kOhrtBetweenStarts = 60 * 60;
 static const NSTimeInterval kOhrtBetweenLists = 60;
 static const NSTimeInterval kOhrtPageWait = 2;
-static const NSTimeInterval kOhrtPageTimeout = 45;
+// Longer than a request is given before it fails by itself, so that an
+// error the fetcher can report gets the chance to arrive first.
+static const NSTimeInterval kOhrtPageTimeout = 75;
 static const unsigned kOhrtMaxPages = 600;
 static const unsigned kOhrtMaxRetries = 3;
 
@@ -151,10 +156,12 @@ static BOOL OhrtIsConnectionError(id error) {
     // could make it skip a page, and a skipped page of followers is people
     // wrongly named. Its answer is waited for instead.
     if (!OhrtCallBool(self.source, @"loading")) OhrtCallVoid(self.source, @"fetchData");
-    // If no answer comes at all, the check stops instead of hanging.
+    // If no answer comes at all, the check does not hang. Silence is what a
+    // connection that has stalled looks like, so it is treated as one, not
+    // as Instagram refusing.
     __weak typeof(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kOhrtPageTimeout * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (weakSelf.generation == generation) [weakSelf pageFailed:NO];
+        if (weakSelf.generation == generation) [weakSelf pageFailed:YES];
     });
 }
 
@@ -335,7 +342,8 @@ static NSString *OhrtSessionAccount(id session) {
 - (NSDate *)availableAt {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSTimeInterval at = OhrtNextCheckAt([NSDate date].timeIntervalSince1970, [defaults doubleForKey:OhrtKey(@"checked_at", self.account)],
-                                        [defaults doubleForKey:OhrtKey(@"cooldown_until", self.account)], kOhrtBetweenChecks);
+                                        [defaults doubleForKey:OhrtKey(@"started_at", self.account)],
+                                        [defaults doubleForKey:OhrtKey(@"cooldown_until", self.account)], kOhrtBetweenChecks, kOhrtBetweenStarts);
     return at > 0 ? [NSDate dateWithTimeIntervalSince1970:at] : nil;
 }
 
@@ -353,7 +361,13 @@ static NSString *OhrtSessionAccount(id session) {
 }
 
 - (void)start {
-    if (self.state != OhrtCheckIdle || ![self load] || [self availableAt]) return;
+    if (self.state != OhrtCheckIdle) return;
+    if (![self load]) {
+        self.note = @"Could not tell which account is signed in, so nothing was started.";
+        [self changed];
+        return;
+    }
+    if ([self availableAt]) return;
     NSString *missing = OhrtMissing(@"followback");
     if (missing) {
         [self stopWithNote:[NSString stringWithFormat:@"This Instagram version does not have what the check was written for (%@).", missing]];
@@ -361,6 +375,7 @@ static NSString *OhrtSessionAccount(id session) {
     }
     self.followers = nil;
     self.note = nil;
+    [[NSUserDefaults standardUserDefaults] setDouble:[NSDate date].timeIntervalSince1970 forKey:OhrtKey(@"started_at", self.account)];
     OhrtLog(@"follow back: check started");
     [self readList:@"followers" then:^(NSDictionary *followers) {
         self.followers = followers;
@@ -395,7 +410,7 @@ static NSString *OhrtSessionAccount(id session) {
         if (end == OhrtScanEndRefused) {
             [weakSelf refused];
         } else if (end == OhrtScanEndInterrupted) {
-            [weakSelf stopWithNote:@"The check was interrupted: the app left the screen or the connection dropped. Nothing was saved. Start it again when it can run for a few minutes."];
+            [weakSelf stopWithNote:@"The check was interrupted: the app left the screen or the connection dropped. Nothing was saved."];
         } else {
             then([weakScan.users copy] ?: @{});
         }
@@ -454,8 +469,9 @@ static long OhrtCount(id boxed) {
 
     // Instagram's own count of followers, to hold the list against. A list
     // that came back short would name people who do follow you.
-    id me = OhrtCall(OhrtCurrentSession(), @"user");
-    long expected = OhrtCount(OhrtCall(me, @"followerCount"));
+    id session = OhrtCurrentSession();
+    BOOL sameAccount = [OhrtSessionAccount(session) isEqualToString:self.account];
+    long expected = sameAccount ? OhrtCount(OhrtCall(OhrtCall(session, @"user"), @"followerCount")) : 0;
     NSMutableString *note = [NSMutableString stringWithFormat:@"Read %lu followers and %lu following.", (unsigned long)self.followers.count, (unsigned long)following.count];
     if (OhrtListLooksShort((long)self.followers.count, expected)) {
         [note appendFormat:@" Instagram counts %ld followers, so the list came back short and some accounts below may follow you after all.", expected];

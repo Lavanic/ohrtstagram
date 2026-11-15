@@ -152,7 +152,10 @@ NSString *OhrtFormatDuration(NSTimeInterval seconds) {
 - (void)becameActive {
     self.lastTick = CACurrentMediaTime();
     [self.timer invalidate];
-    self.timer = [NSTimer scheduledTimerWithTimeInterval:kOhrtTick target:self selector:@selector(tick) userInfo:nil repeats:YES];
+    // In the common modes, or it would stand still for as long as a list is
+    // being scrolled, which is most of the time in this app.
+    self.timer = [NSTimer timerWithTimeInterval:kOhrtTick target:self selector:@selector(tick) userInfo:nil repeats:YES];
+    [[NSRunLoop mainRunLoop] addTimer:self.timer forMode:NSRunLoopCommonModes];
     [self evaluate];
 }
 
@@ -203,8 +206,9 @@ NSString *OhrtFormatDuration(NSTimeInterval seconds) {
         OhrtLockViewController *controller = [OhrtLockViewController new];
         __weak typeof(self) weakSelf = self;
         controller.onMore = ^{
-            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-            [defaults setInteger:[defaults integerForKey:kOhrtExtraMinutesKey] + kOhrtExtraStep forKey:kOhrtExtraMinutesKey];
+            // Five minutes from now, however long the lock has been up.
+            long extra = OhrtExtraAfterMore(OhrtTimeSpentToday(), (long)[weakSelf budgetMinutes], kOhrtExtraStep);
+            [[NSUserDefaults standardUserDefaults] setInteger:extra forKey:kOhrtExtraMinutesKey];
             [weakSelf evaluate];
         };
         UIWindow *window = [[UIWindow alloc] initWithWindowScene:scene];

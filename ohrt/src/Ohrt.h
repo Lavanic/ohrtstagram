@@ -22,6 +22,14 @@ FOUNDATION_EXPORT BOOL OhrtFeature(NSString *key);
 FOUNDATION_EXPORT void OhrtLaunchSettled(void);
 FOUNDATION_EXPORT BOOL OhrtTry(NSString *feature, void (NS_NOESCAPE ^piece)(void));
 
+FOUNDATION_EXPORT void OhrtGuardAppLaunching(void);
+
+// Each puts in its hooks if its switch is on. Called once, as the app
+// launches: the preferences cannot always be read any earlier.
+FOUNDATION_EXPORT void OhrtInstallDMMode(void);
+FOUNDATION_EXPORT void OhrtInstallFollowing(void);
+FOUNDATION_EXPORT void OhrtInstallWall(void);
+
 // What a feature needs from the Instagram that is running (OhrtNeeds.m).
 FOUNDATION_EXPORT NSString *OhrtMissing(NSString *feature);
 FOUNDATION_EXPORT BOOL OhrtAvailable(NSString *feature);

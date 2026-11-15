@@ -10,6 +10,11 @@
 // The counting is in OhrtLogic.h, where it is tested. This file feeds it
 // the app's events and keeps its one number between runs.
 //
+// iOS also starts apps ahead of time ("prewarming"): it loads the app and
+// everything injected into it, stops short of launching, and often throws
+// the process away. That is not a start anyone asked for, so such a process
+// counts for nothing until the app is really launched in it.
+//
 // The same can be asked for by hand: the app's page in the iPhone's
 // Settings app has a switch, "Start with everything off", for when the app
 // will not stay up long enough to count anything.
@@ -25,6 +30,12 @@ static const NSTimeInterval kOhrtSettleAfter = 15;
 
 static OhrtGuard gOhrtGuard;
 static BOOL gOhrtForced;
+static BOOL gOhrtLaunching;
+
+static BOOL OhrtPrewarmed(void) {
+    const char *value = getenv("ActivePrewarm");
+    return value && value[0] == '1';
+}
 
 // Applies one event to the guard and writes its number out if it moved.
 static void OhrtGuardStep(void (^event)(void)) {
@@ -43,6 +54,7 @@ BOOL OhrtSafeLaunch(void) {
     dispatch_once(&once, ^{
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         OhrtGuardStart(&gOhrtGuard, [defaults integerForKey:kOhrtUnfinishedKey]);
+        if (OhrtPrewarmed() && !gOhrtLaunching) OhrtGuardNotAskedFor(&gOhrtGuard);
         gOhrtForced = [defaults boolForKey:kOhrtForceSafeKey];
         first = YES;
     });
@@ -60,6 +72,17 @@ BOOL OhrtSafeLaunch(void) {
 
 BOOL OhrtFeature(NSString *key) {
     return !OhrtSafeLaunch() && OhrtBool(key);
+}
+
+// Called as the app delegate starts launching, which a prewarmed process
+// only reaches if the app is really being opened in it.
+void OhrtGuardAppLaunching(void) {
+    gOhrtLaunching = YES;
+    OhrtSafeLaunch();
+    if ([UIApplication sharedApplication].applicationState == UIApplicationStateBackground) return;
+    OhrtGuardStep(^{
+        OhrtGuardLaunchingAtFront(&gOhrtGuard);
+    });
 }
 
 void OhrtLaunchSettled(void) {
@@ -109,11 +132,15 @@ static void OhrtSaySafe(void) {
 }
 
 __attribute__((constructor)) static void OhrtGuardLoad(void) {
-    OhrtSafeLaunch();
+    // A prewarmed process may not be able to read the preferences yet (the
+    // phone may not have been unlocked since it was switched on), so there
+    // the guard starts when the app does.
+    if (!OhrtPrewarmed()) OhrtSafeLaunch();
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
     NSOperationQueue *main = [NSOperationQueue mainQueue];
 
     [center addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil queue:main usingBlock:^(NSNotification *note) {
+        OhrtSafeLaunch();
         BOOL inBackground = [UIApplication sharedApplication].applicationState == UIApplicationStateBackground;
         OhrtGuardStep(^{
             OhrtGuardFinishedLaunching(&gOhrtGuard, inBackground);
@@ -121,6 +148,7 @@ __attribute__((constructor)) static void OhrtGuardLoad(void) {
     }];
 
     [center addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:main usingBlock:^(NSNotification *note) {
+        OhrtSafeLaunch();
         __block int first = 0;
         OhrtGuardStep(^{
             first = OhrtGuardBecameActive(&gOhrtGuard);
@@ -135,8 +163,12 @@ __attribute__((constructor)) static void OhrtGuardLoad(void) {
         });
     }];
 
-    for (NSNotificationName name in @[ UIApplicationWillResignActiveNotification, UIApplicationDidEnterBackgroundNotification, UIApplicationWillTerminateNotification ]) {
+    // Going to the background or being closed is leaving. Merely going
+    // inactive is not: a permission prompt over the app does that, and a
+    // crash right behind it should still count.
+    for (NSNotificationName name in @[ UIApplicationDidEnterBackgroundNotification, UIApplicationWillTerminateNotification ]) {
         [center addObserverForName:name object:nil queue:main usingBlock:^(NSNotification *note) {
+            OhrtSafeLaunch();
             OhrtGuardStep(^{
                 OhrtGuardLeft(&gOhrtGuard);
             });

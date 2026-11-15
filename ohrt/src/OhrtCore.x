@@ -90,10 +90,20 @@ static void OhrtWelcome(void) {
 
 %hook IGInstagramAppDelegate
 - (_Bool)application:(UIApplication *)application willFinishLaunchingWithOptions:(id)options {
-    // Upstream registers its defaults in its own hook of this method, before
-    // it calls through. Ours go in on both sides of the call, so they are in
-    // force while Instagram starts and are still the later registration
-    // whichever of the two hooks ends up outermost.
+    // This is the first moment that is certainly a real launch with the
+    // preferences readable. iOS loads the app ahead of time, sometimes on a
+    // phone that has not been unlocked since it was switched on, and what
+    // our constructors could read then is not to be trusted. So the guard is
+    // told, and the features that hook Instagram decide here whether to.
+    OhrtGuardAppLaunching();
+    OhrtInstallDMMode();
+    OhrtInstallFollowing();
+    OhrtInstallWall();
+
+    // Upstream registers its defaults in its own hook of this method, which
+    // runs inside the call below. Ours are registered before it so our own
+    // keys are there during the call, and again after it so that where both
+    // name a key (the two it turns on and we do not), ours is the later one.
     OhrtRegisterDefaults();
     _Bool result = %orig;
     OhrtRegisterDefaults();

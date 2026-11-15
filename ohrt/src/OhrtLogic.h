@@ -32,6 +32,15 @@ static inline int OhrtOverBudget(double spentSeconds, long budgetMinutes, long e
     return spentSeconds >= (double)(budgetMinutes + extraMinutes) * 60.0;
 }
 
+// What "five more minutes" sets the extra allowance to: enough to be `step`
+// minutes past the time already spent, however far past the budget that is.
+// Adding the step to an allowance that is already behind would lift nothing.
+static inline long OhrtExtraAfterMore(double spentSeconds, long budgetMinutes, long step) {
+    long spent = (long)ceil(spentSeconds / 60.0);
+    long extra = spent - budgetMinutes + step;
+    return extra < step ? step : extra;
+}
+
 // Caught up wall
 
 typedef enum {
@@ -63,6 +72,22 @@ static inline size_t OhrtWallKeep(const OhrtFeedItem *items, size_t count, doubl
     if (end == count) return count;
     while (end > 0 && items[end - 1].kind == OhrtFeedTrailer) end--;
     return end;
+}
+
+// Whether the posts are newest first, give or take: a post that is newer
+// than the one before it is out of order, and one in ten of those is put up
+// with (a pinned post, two posted in the same second). The wall only makes
+// sense for a feed in time order, and a ranked feed fails this at once.
+static inline int OhrtFeedInTimeOrder(const OhrtFeedItem *items, size_t count) {
+    size_t posts = 0, outOfOrder = 0;
+    double previous = 0;
+    for (size_t index = 0; index < count; index++) {
+        if (items[index].kind != OhrtFeedPost) continue;
+        if (posts > 0 && items[index].taken > previous) outOfOrder++;
+        previous = items[index].taken;
+        posts++;
+    }
+    return outOfOrder * 10 <= posts;
 }
 
 // The mark a visit starts with: where the wall was last reached, or, with no
@@ -118,10 +143,15 @@ static inline double OhrtRefusalWaitHours(long failures) {
     return 72;
 }
 
-// When the next check may start, or 0 if it may start now.
-static inline double OhrtNextCheckAt(double now, double checkedAt, double cooldownUntil, double betweenChecks) {
-    double spaced = checkedAt > 0 ? checkedAt + betweenChecks : 0;
-    double at = spaced > cooldownUntil ? spaced : cooldownUntil;
+// When the next check may start, or 0 if it may start now. A check that
+// finished is spaced from the next by `betweenChecks`. One that was started
+// and never finished (interrupted, or the app was closed) has still read
+// part of the lists, so it is spaced too, by the shorter `betweenStarts`.
+static inline double OhrtNextCheckAt(double now, double checkedAt, double startedAt, double cooldownUntil,
+                                     double betweenChecks, double betweenStarts) {
+    double at = cooldownUntil;
+    if (checkedAt > 0 && checkedAt + betweenChecks > at) at = checkedAt + betweenChecks;
+    if (startedAt > 0 && startedAt + betweenStarts > at) at = startedAt + betweenStarts;
     return at > now ? at : 0;
 }
 
@@ -133,7 +163,8 @@ static inline double OhrtNextCheckAt(double now, double checkedAt, double cooldo
 //
 // A start that did not settle is a process that died before it finished
 // launching, or within a while of first coming to the front. A process
-// started in the background and dropped there is neither.
+// started in the background and dropped there is neither, and nor is one
+// iOS started ahead of time ("prewarmed") and then threw away.
 typedef struct {
     long stored;
     long before;    // what was stored when this process started
@@ -159,10 +190,25 @@ static inline void OhrtGuardSettle(OhrtGuard *guard) {
     guard->stored = 0;
 }
 
-static inline void OhrtGuardFinishedLaunching(OhrtGuard *guard, int inBackground) {
-    if (!inBackground || guard->wasActive || guard->settled) return;
+// The process turns out not to be a start the user asked for: it was
+// prewarmed, or it finished launching in the background. It stops counting
+// against the app unless it comes to the front after all.
+static inline void OhrtGuardNotAskedFor(OhrtGuard *guard) {
+    if (guard->wasActive || guard->settled) return;
     guard->stored = guard->before;
     guard->counted = 0;
+}
+
+static inline void OhrtGuardFinishedLaunching(OhrtGuard *guard, int inBackground) {
+    if (inBackground) OhrtGuardNotAskedFor(guard);
+}
+
+// The app is being launched at the front: a prewarmed process that was not
+// counting starts to.
+static inline void OhrtGuardLaunchingAtFront(OhrtGuard *guard) {
+    if (guard->counted || guard->settled) return;
+    guard->stored = guard->before + 1;
+    guard->counted = 1;
 }
 
 // Returns 1 the first time the app comes to the front in this process,
@@ -170,16 +216,16 @@ static inline void OhrtGuardFinishedLaunching(OhrtGuard *guard, int inBackground
 static inline int OhrtGuardBecameActive(OhrtGuard *guard) {
     if (guard->wasActive) return 0;
     guard->wasActive = 1;
-    if (!guard->counted && !guard->settled) {
-        guard->stored = guard->before + 1;
-        guard->counted = 1;
-    }
+    OhrtGuardLaunchingAtFront(guard);
     return 1;
 }
 
-// Leaving the app the ordinary way is not a crash, however soon.
+// The app went to the background or was closed the ordinary way, which is
+// not a crash, however soon. A process that was not counting (prewarmed, or
+// started in the background) has nothing to settle and must not wipe what
+// earlier starts left.
 static inline void OhrtGuardLeft(OhrtGuard *guard) {
-    if (guard->wasActive) OhrtGuardSettle(guard);
+    if (guard->counted) OhrtGuardSettle(guard);
 }
 
 #endif

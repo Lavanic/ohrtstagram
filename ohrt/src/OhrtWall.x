@@ -86,8 +86,10 @@ static void OhrtSetExtraHeight(UICollectionView *list, CGFloat height) {
 
 @interface OhrtWallView : UIView
 @property (nonatomic, weak) UICollectionView *list;
-// The newest post above the wall.
+@property (nonatomic, weak) id adapter;
+// The newest post above the wall, and the last thing above it.
 @property (nonatomic) NSTimeInterval newest;
+@property (nonatomic, weak) id lastKept;
 @property (nonatomic) BOOL observing;
 @end
 
@@ -176,6 +178,12 @@ static void OhrtSetExtraHeight(UICollectionView *list, CGFloat height) {
 
     if (self.newest <= 0 || !self.window) return;
     if ([UIApplication sharedApplication].applicationState != UIApplicationStateActive) return;
+    // The list may still be showing what it held before: it works out its
+    // changes on its own time. Until what is on screen ends where this wall
+    // was measured to stand, reaching the wall says nothing about the posts
+    // it was measured against, and the mark must not move past them.
+    id shown = OhrtCall(self.adapter, @"objects");
+    if (![shown isKindOfClass:[NSArray class]] || [(NSArray *)shown lastObject] != self.lastKept) return;
     CGFloat visibleBottom = list.contentOffset.y + list.bounds.size.height - list.adjustedContentInset.bottom;
     if (visibleBottom < CGRectGetMidY(frame)) return;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -184,7 +192,7 @@ static void OhrtSetExtraHeight(UICollectionView *list, CGFloat height) {
 
 @end
 
-static void OhrtShowWall(id adapter, BOOL show, NSTimeInterval newest) {
+static void OhrtShowWall(id adapter, BOOL show, NSTimeInterval newest, id lastKept) {
     UICollectionView *list = OhrtCall(adapter, @"collectionView");
     if (![list isKindOfClass:[UICollectionView class]]) return;
     OhrtWallView *wall = objc_getAssociatedObject(list, &kOhrtWallViewKey);
@@ -197,11 +205,15 @@ static void OhrtShowWall(id adapter, BOOL show, NSTimeInterval newest) {
     if (!wall) {
         wall = [[OhrtWallView alloc] initWithFrame:CGRectZero];
         objc_setAssociatedObject(list, &kOhrtWallViewKey, wall, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        wall.adapter = adapter;
         wall.newest = newest;
+        wall.lastKept = lastKept;
         [wall attachTo:list];
         return;
     }
+    wall.adapter = adapter;
     wall.newest = newest;
+    wall.lastKept = lastKept;
     [wall place];
 }
 
@@ -227,7 +239,9 @@ static BOOL OhrtIsFollowingFeed(id dataSource, id viewModel) {
 
 // The objects up to the first old post. `newest` is set to the time of the
 // newest post kept; `cut` says whether anything was left out. Where to cut
-// is decided in OhrtLogic.h; this only tells it what each object is.
+// is decided in OhrtLogic.h; this only tells it what each object is. A list
+// that is not newest first is left whole: the feed may be called following
+// and still hold a ranked page from before it was (a copy kept on disk).
 static NSArray *OhrtCutAtWall(NSArray *objects, NSTimeInterval *newest, BOOL *cut) {
     Class media = objc_getClass("IGMedia");
     NSUInteger count = objects.count;
@@ -261,6 +275,15 @@ static NSArray *OhrtCutAtWall(NSArray *objects, NSTimeInterval *newest, BOOL *cu
             if ([object isKindOfClass:cls]) items[index].kind = OhrtFeedTrailer;
         }
     }
+    if (!OhrtFeedInTimeOrder(items, count)) {
+        free(items);
+        static BOOL said;
+        if (!said) {
+            said = YES;
+            OhrtLog(@"wall: this feed is not in time order, so it is left whole");
+        }
+        return objects;
+    }
     double newestKept = 0;
     size_t keep = OhrtWallKeep(items, count, gCutoff, &newestKept);
     free(items);
@@ -293,28 +316,30 @@ static NSArray *OhrtCutAtWall(NSArray *objects, NSTimeInterval *newest, BOOL *cu
         cut = NO;
     }
     if (viewModel) objc_setAssociatedObject(viewModel, &kOhrtWalledKey, cut ? @YES : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    static NSUInteger lastKept = NSNotFound, lastCount = NSNotFound;
-    if (cut && (kept.count != lastKept || objects.count != lastCount)) {
-        lastKept = kept.count;
-        lastCount = objects.count;
+    static NSUInteger loggedKept = NSNotFound, loggedCount = NSNotFound;
+    if (cut && (kept.count != loggedKept || objects.count != loggedCount)) {
+        loggedKept = kept.count;
+        loggedCount = objects.count;
         OhrtLog(@"wall: showing %lu of %lu feed items", (unsigned long)kept.count, (unsigned long)objects.count);
     }
     objects = kept;
 
-    // The list is in the middle of working out an update here. The wall is
-    // put up once that is done.
+    // The list is in the middle of working out an update here, so the wall
+    // is put up afterwards. That may still be before the update shows, which
+    // is why the wall checks what is on screen before it moves the mark.
+    id lastKept = cut ? kept.lastObject : nil;
     __weak id weakAdapter = adapter;
     dispatch_async(dispatch_get_main_queue(), ^{
         id strongAdapter = weakAdapter;
         if (!strongAdapter) return;
         BOOL shown = OhrtTry(@"wall", ^{
-            OhrtShowWall(strongAdapter, cut, newest);
+            OhrtShowWall(strongAdapter, cut, newest, lastKept);
         });
         if (shown) return;
         // The wall is off for this run; a line left behind from before
         // would be a lie.
         @try {
-            OhrtShowWall(strongAdapter, NO, 0);
+            OhrtShowWall(strongAdapter, NO, 0, nil);
         } @catch (NSException *exception) {
         }
     });
@@ -336,8 +361,8 @@ static NSArray *OhrtCutAtWall(NSArray *objects, NSTimeInterval *newest, BOOL *cu
 
 %end
 
-%ctor {
-    // Nothing is hooked unless the wall is on when the app starts.
+// Nothing is hooked unless the wall is on when the app starts.
+static void OhrtStartWall(void) {
     if (!OhrtFeatureReady(kOhrtWallKey, @"wall")) return;
     gCutoff = OhrtSavedMark();
     %init(OhrtWall);
@@ -355,4 +380,11 @@ static NSArray *OhrtCutAtWall(NSArray *objects, NSTimeInterval *newest, BOOL *cu
         SEL update = NSSelectorFromString(@"performUpdatesAnimated:completion:");
         if ([adapter respondsToSelector:update]) ((void (*)(id, SEL, BOOL, id))objc_msgSend)(adapter, update, NO, nil);
     }];
+}
+
+void OhrtInstallWall(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        OhrtStartWall();
+    });
 }

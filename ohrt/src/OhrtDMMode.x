@@ -42,7 +42,10 @@ static char kOhrtLandedKey;
 
 %end
 
-%ctor {
-    // Nothing is hooked unless the mode is on when the app starts.
-    if (OhrtFeatureReady(kOhrtDMModeKey, @"dm")) %init(OhrtDMMode);
+// Nothing is hooked unless the mode is on when the app starts.
+void OhrtInstallDMMode(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        if (OhrtFeatureReady(kOhrtDMModeKey, @"dm")) %init(OhrtDMMode);
+    });
 }

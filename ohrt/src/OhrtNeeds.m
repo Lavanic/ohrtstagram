@@ -33,6 +33,7 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("wall", "IGMainFeedViewModel", "fetchMoreItemsWithPrefetchType:fetchReason:extraParams:"),
     OHRT_NEED("wall", "IGMedia", "takenAtDate"),
     OHRT_NEED("wall", "IGListAdapter", "collectionView"),
+    OHRT_NEED("wall", "IGListAdapter", "objects"),
 
     OHRT_NEED("dm", "IGTabBarController", "viewWillAppear:"),
     OHRT_NEED("dm", "IGTabBarController", "_tabBarHasDirectInbox"),
@@ -58,14 +59,26 @@ static const OhrtNeed kOhrtNeeds[] = {
 
 static const size_t kOhrtNeedCount = sizeof(kOhrtNeeds) / sizeof(kOhrtNeeds[0]);
 
-// Asked of the runtime's tables directly: sending the class a message to
-// ask would run its +initialize, and this is called before the app has
-// started.
+// Read off the classes' own method lists. Asking the class
+// (respondsToSelector:) or the runtime's lookup (class_getInstanceMethod)
+// would, for a method that is missing, run the class's code to give it a
+// chance to supply one, and this is called while the app is starting.
+static BOOL OhrtHasMethod(Class cls, SEL selector) {
+    for (Class current = cls; current; current = class_getSuperclass(current)) {
+        unsigned int count = 0;
+        Method *methods = class_copyMethodList(current, &count);
+        BOOL found = NO;
+        for (unsigned int index = 0; index < count && !found; index++) found = method_getName(methods[index]) == selector;
+        free(methods);
+        if (found) return YES;
+    }
+    return NO;
+}
+
 static BOOL OhrtNeedMet(const OhrtNeed *need) {
     Class cls = objc_getClass(need->cls);
     if (!cls) return NO;
-    SEL selector = sel_registerName(need->selector);
-    return (need->onClass ? class_getClassMethod(cls, selector) : class_getInstanceMethod(cls, selector)) != NULL;
+    return OhrtHasMethod(need->onClass ? object_getClass(cls) : cls, sel_registerName(need->selector));
 }
 
 NSString *OhrtMissing(NSString *feature) {

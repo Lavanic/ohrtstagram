@@ -39,6 +39,16 @@ static void time_budget(void) {
     CHECK("five more minutes lifts it", !OhrtOverBudget(31 * 60, 30, 5));
     CHECK("and it comes back", OhrtOverBudget(35 * 60, 30, 5));
     CHECK("negative extra is ignored", OhrtOverBudget(30 * 60, 30, -10));
+
+    // "Five more minutes" has to lift the lock from wherever the count is.
+    long extra = OhrtExtraAfterMore(30 * 60, 30, 5);
+    CHECK("at the budget, five more is five", extra == 5 && !OhrtOverBudget(30 * 60, 30, extra));
+    extra = OhrtExtraAfterMore(120 * 60, 30, 5);
+    CHECK("two hours in on a half hour budget, one tap lifts it", extra == 95 && !OhrtOverBudget(120 * 60, 30, extra));
+    CHECK("and it holds for five minutes, no longer", !OhrtOverBudget(124 * 60, 30, extra) && OhrtOverBudget(125 * 60, 30, extra));
+    extra = OhrtExtraAfterMore(31 * 60 + 20, 30, 5);
+    CHECK("part minutes round up", extra == 7 && !OhrtOverBudget(31 * 60 + 20, 30, extra));
+    CHECK("never less than the step", OhrtExtraAfterMore(0, 30, 5) == 5);
 }
 
 static void wall(void) {
@@ -67,6 +77,21 @@ static void wall(void) {
     // is newer but further down goes with it.
     OhrtFeedItem unordered[] = {{OhrtFeedPost, 500}, {OhrtFeedPost, 100}, {OhrtFeedPost, 450}};
     CHECK("out of order cuts at the first old post", OhrtWallKeep(unordered, 3, 300, &newest) == 1 && newest == 500);
+
+    CHECK("the following feed is in time order", OhrtFeedInTimeOrder(feed, count));
+    CHECK("an empty feed is in time order", OhrtFeedInTimeOrder(feed, 0));
+    OhrtFeedItem ranked[] = {{OhrtFeedPost, 300}, {OhrtFeedPost, 900}, {OhrtFeedPost, 100}, {OhrtFeedPost, 700}, {OhrtFeedPost, 500},
+                             {OhrtFeedPost, 800}, {OhrtFeedPost, 200}, {OhrtFeedPost, 600}};
+    CHECK("a ranked feed is not", !OhrtFeedInTimeOrder(ranked, 8));
+    OhrtFeedItem pinned[12];
+    for (int index = 0; index < 12; index++) pinned[index] = (OhrtFeedItem){OhrtFeedPost, 1000 - index * 10};
+    pinned[0].taken = 5;  // an old post pinned to the top
+    CHECK("one pinned post in a dozen is put up with", OhrtFeedInTimeOrder(pinned, 12));
+    pinned[4].taken = 2000;
+    pinned[8].taken = 3000;
+    CHECK("three out of order in a dozen are not", !OhrtFeedInTimeOrder(pinned, 12));
+    OhrtFeedItem same[] = {{OhrtFeedPost, 500}, {OhrtFeedPost, 500}, {OhrtFeedPost, 400}};
+    CHECK("two posts of the same second are in order", OhrtFeedInTimeOrder(same, 3));
 
     CHECK("a saved mark is used", OhrtWallMark(1234, 99999, 1000) == 1234);
     CHECK("no saved mark looks back from now", OhrtWallMark(0, 99999, 1000) == 98999);
@@ -104,16 +129,22 @@ static void follow_back(void) {
     CHECK("third refusal", OhrtRefusalWaitHours(3) == 48);
     CHECK("later refusals", OhrtRefusalWaitHours(4) == 72 && OhrtRefusalWaitHours(40) == 72);
 
-    double three_hours = 3 * 3600;
-    CHECK("never checked: now", OhrtNextCheckAt(1000000, 0, 0, three_hours) == 0);
-    CHECK("just checked: in three hours", OhrtNextCheckAt(1000000, 999000, 0, three_hours) == 999000 + three_hours);
-    CHECK("checked long ago: now", OhrtNextCheckAt(1000000, 900000, 0, three_hours) == 0);
-    CHECK("a cooldown outlasts the spacing", OhrtNextCheckAt(1000000, 999000, 1050000, three_hours) == 1050000);
-    CHECK("a cooldown that has passed", OhrtNextCheckAt(1000000, 0, 999999, three_hours) == 0);
+    double three_hours = 3 * 3600, one_hour = 3600;
+    CHECK("never checked: now", OhrtNextCheckAt(1000000, 0, 0, 0, three_hours, one_hour) == 0);
+    CHECK("just checked: in three hours", OhrtNextCheckAt(1000000, 999000, 0, 0, three_hours, one_hour) == 999000 + three_hours);
+    CHECK("checked long ago: now", OhrtNextCheckAt(1000000, 900000, 0, 0, three_hours, one_hour) == 0);
+    CHECK("a cooldown outlasts the spacing", OhrtNextCheckAt(1000000, 999000, 0, 1050000, three_hours, one_hour) == 1050000);
+    CHECK("a cooldown that has passed", OhrtNextCheckAt(1000000, 0, 0, 999999, three_hours, one_hour) == 0);
+    CHECK("started and never finished: in an hour", OhrtNextCheckAt(1000000, 0, 999500, 0, three_hours, one_hour) == 999500 + one_hour);
+    CHECK("an unfinished start long ago: now", OhrtNextCheckAt(1000000, 0, 990000, 0, three_hours, one_hour) == 0);
+    CHECK("finished after it started: the longer wait", OhrtNextCheckAt(1000000, 999800, 999500, 0, three_hours, one_hour) == 999800 + three_hours);
 }
 
 // One process: what it does before it dies, and what it leaves stored.
-typedef enum { DIES_LAUNCHING, DROPPED_IN_BACKGROUND, DIES_AT_THE_FRONT, FRONT_AFTER_BACKGROUND_DIES, SETTLES, FRONT_AFTER_BACKGROUND_SETTLES, LEFT_QUICKLY } Life;
+typedef enum {
+    DIES_LAUNCHING, DROPPED_IN_BACKGROUND, DIES_AT_THE_FRONT, FRONT_AFTER_BACKGROUND_DIES, SETTLES, FRONT_AFTER_BACKGROUND_SETTLES,
+    LEFT_QUICKLY, PREWARMED_AND_DROPPED, PREWARMED_DIES_LAUNCHING, PREWARMED_SETTLES, LEFT_BEFORE_ACTIVE, BACKGROUND_THEN_LEFT,
+} Life;
 
 static long run(long stored, Life life, int *safe) {
     OhrtGuard guard;
@@ -146,6 +177,28 @@ static long run(long stored, Life life, int *safe) {
         case LEFT_QUICKLY:
             OhrtGuardFinishedLaunching(&guard, 0);
             OhrtGuardBecameActive(&guard);
+            OhrtGuardLeft(&guard);
+            break;
+        case PREWARMED_AND_DROPPED:
+            OhrtGuardNotAskedFor(&guard);
+            break;
+        case PREWARMED_DIES_LAUNCHING:
+            OhrtGuardNotAskedFor(&guard);
+            OhrtGuardLaunchingAtFront(&guard);
+            break;
+        case PREWARMED_SETTLES:
+            OhrtGuardNotAskedFor(&guard);
+            OhrtGuardLaunchingAtFront(&guard);
+            OhrtGuardFinishedLaunching(&guard, 0);
+            OhrtGuardBecameActive(&guard);
+            OhrtGuardSettle(&guard);
+            break;
+        case LEFT_BEFORE_ACTIVE:
+            OhrtGuardFinishedLaunching(&guard, 0);
+            OhrtGuardLeft(&guard);
+            break;
+        case BACKGROUND_THEN_LEFT:
+            OhrtGuardFinishedLaunching(&guard, 1);
             OhrtGuardLeft(&guard);
             break;
     }
@@ -190,6 +243,18 @@ static void guard(void) {
     CHECK("settling at the front after a background start clears", run(1, FRONT_AFTER_BACKGROUND_SETTLES, NULL) == 0);
 
     CHECK("leaving within the wait is not a failure", run(1, LEFT_QUICKLY, NULL) == 0);
+    CHECK("nor is leaving before the app was ever at the front", run(1, LEFT_BEFORE_ACTIVE, NULL) == 0);
+    CHECK("a background start that is told it left wipes nothing", run(1, BACKGROUND_THEN_LEFT, NULL) == 1);
+
+    stored = 0;
+    for (int index = 0; index < 20; index++) stored = run(stored, PREWARMED_AND_DROPPED, NULL);
+    run(stored, SETTLES, &safe);
+    CHECK("any number of prewarmed starts thrown away never trip it", !safe && stored == 0);
+    CHECK("a prewarmed start between two failures forgets neither", run(1, PREWARMED_AND_DROPPED, NULL) == 1);
+    stored = run(run(0, PREWARMED_DIES_LAUNCHING, NULL), PREWARMED_DIES_LAUNCHING, NULL);
+    run(stored, SETTLES, &safe);
+    CHECK("a prewarmed start that dies once it is launched counts", stored == 2 && safe);
+    CHECK("a prewarmed start that settles clears", run(1, PREWARMED_SETTLES, NULL) == 0);
     CHECK("a death in safe mode keeps it tripped", run(2, DIES_LAUNCHING, &safe) == 3 && safe);
     CHECK("a nonsense stored value is treated as none", run(-5, DIES_LAUNCHING, &safe) == 1 && !safe);
 

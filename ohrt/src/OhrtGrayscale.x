@@ -35,7 +35,7 @@ static void OhrtSetGrayscale(UIWindow *window, BOOL on) {
 }
 
 static void OhrtGrayscaleRefresh(void) {
-    BOOL on = OhrtBool(kOhrtGrayscaleKey);
+    BOOL on = OhrtFeature(kOhrtGrayscaleKey);
     for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
         if (![scene isKindOfClass:[UIWindowScene class]]) continue;
         for (UIWindow *window in ((UIWindowScene *)scene).windows) OhrtSetGrayscale(window, on);
@@ -47,11 +47,11 @@ static void OhrtGrayscaleRefresh(void) {
 %hook UIWindow
 - (void)setHidden:(BOOL)hidden {
     %orig;
-    if (!hidden && OhrtBool(kOhrtGrayscaleKey)) OhrtSetGrayscale(self, YES);
+    if (!hidden && OhrtFeature(kOhrtGrayscaleKey)) OhrtSetGrayscale(self, YES);
 }
 - (void)makeKeyAndVisible {
     %orig;
-    if (OhrtBool(kOhrtGrayscaleKey)) OhrtSetGrayscale(self, YES);
+    if (OhrtFeature(kOhrtGrayscaleKey)) OhrtSetGrayscale(self, YES);
 }
 %end
 
@@ -63,7 +63,7 @@ static void OhrtGrayscaleRefresh(void) {
     last = OhrtBool(kOhrtGrayscaleKey);
     [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:[NSOperationQueue mainQueue]
                                                   usingBlock:^(NSNotification *note) {
-        BOOL now = OhrtBool(kOhrtGrayscaleKey);
+        BOOL now = OhrtFeature(kOhrtGrayscaleKey);
         if (now == last) return;
         last = now;
         OhrtGrayscaleRefresh();

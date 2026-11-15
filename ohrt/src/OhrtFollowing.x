@@ -79,7 +79,16 @@
 
 %end
 
-%ctor {
-    // Nothing is hooked unless the feed is on when the app starts.
-    if (OhrtFollowingFeedEnabled() && !OhrtSafeLaunch() && OhrtAvailable(@"following")) %init(OhrtFollowing);
+// Nothing is hooked unless the feed is on when the app starts.
+void OhrtInstallFollowing(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        if (!OhrtFollowingFeedEnabled() || OhrtSafeLaunch()) return;
+        NSString *missing = OhrtMissing(@"following");
+        if (missing) {
+            OhrtLog(@"following feed is switched on but left off: this Instagram lacks %@", missing);
+            return;
+        }
+        %init(OhrtFollowing);
+    });
 }
