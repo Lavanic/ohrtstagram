@@ -5,6 +5,7 @@
   calls.py '+[IGMainAppSurfaceIntent directInbox]'
   calls.py --raw '-[...]'        also list calls into unnamed functions
   calls.py --to <selector>       the methods that send a message
+  calls.py --uses <string>       the methods that refer to a string constant
 
 It reads the method's machine code out of the decrypted IPA and lists, in
 order, the messages it sends, the strings and classes it refers to and the
@@ -319,15 +320,69 @@ def senders(code, db, image, selector):
             row = db.execute("select class, kind, sel from methods where image = ? and code = ? limit 1", (image, owner)).fetchone()
             names.add(f"{row[1]}[{row[0]} {row[2]}]")
             continue
-        if depth >= 4:
-            continue
-        # Inside an outlined fragment: it starts at the nearest address
-        # before the call that something branches to.
+        # Not in a method: an outlined fragment, which starts at the nearest
+        # address before the call that something branches to, or a block or
+        # plain function, which the compiler puts after the method it was
+        # written in.
         left = numpy.searchsorted(sorted_targets, site - 128, "left")
         right = numpy.searchsorted(sorted_targets, site, "right")
         entries = sorted(set(sorted_targets[left:right].tolist()))
-        if entries:
-            pending += [(caller, depth + 1) for caller in callers_of([entries[-1]])]
+        callers = callers_of([entries[-1]]) if entries and depth < 4 else []
+        if callers:
+            pending += [(caller, depth + 1) for caller in callers]
+        elif owner is not None:
+            row = db.execute("select class, kind, sel from methods where image = ? and code = ? limit 1", (image, owner)).fetchone()
+            names.add(f"{row[1]}[{row[0]} {row[2]}]   (in a block or function after it)")
+    return sorted(names)
+
+
+def users_of(code, db, image, text):
+    """The methods in one binary that refer to the string constant `text`."""
+    import bisect
+    import numpy
+
+    wanted = set()
+    encoded = text.encode()
+    for name in ("__cstring", "__objc_methname"):
+        if name not in code.sections:
+            continue
+        address, length, offset = code.sections[name]
+        blob = code.data[offset:offset + length]
+        at = blob.find(b"\0" + encoded + b"\0")
+        while at != -1:
+            wanted.add(address + at + 1)
+            at = blob.find(b"\0" + encoded + b"\0", at + 1)
+    if "__cfstring" in code.sections:
+        address, length, _ = code.sections["__cfstring"]
+        for entry in range(address, address + length, 32):
+            if code.pointer(entry + 16) in wanted:
+                wanted.add(entry)
+    if not wanted:
+        return None
+
+    text_low, text_high = code.ranges["__text"]
+    words = numpy.frombuffer(code.data, dtype="<u4", count=(text_high - text_low) // 4, offset=code.offset(text_low))
+    adrp = numpy.nonzero((words[:-1] & 0x9F000000) == 0x90000000)[0]
+    add = words[adrp + 1]
+    pair = ((add & 0xFFC00000) == 0x91000000) & (((add >> 5) & 31) == (words[adrp] & 31))
+    adrp, add = adrp[pair], add[pair]
+    immediate = ((((words[adrp] >> 5) & 0x7FFFF).astype(numpy.int64) << 2) | ((words[adrp] >> 29) & 3).astype(numpy.int64))
+    immediate = numpy.where(immediate & 0x100000, immediate - 0x200000, immediate)
+    addresses = text_low + adrp.astype(numpy.int64) * 4
+    loaded = (addresses & ~0xFFF) + (immediate << 12) + ((add >> 10) & 0xFFF).astype(numpy.int64)
+    sites = addresses[numpy.isin(loaded, numpy.array(sorted(wanted), dtype=numpy.int64))].tolist()
+
+    starts = [row[0] for row in db.execute("select distinct code from methods where image = ? and code > 0 order by code", (image,))]
+    names = set()
+    for site in sites:
+        position = bisect.bisect_right(starts, site) - 1
+        if position < 0:
+            continue
+        owner = starts[position]
+        following = starts[position + 1] if position + 1 < len(starts) else text_high
+        row = db.execute("select class, kind, sel from methods where image = ? and code = ? limit 1", (image, owner)).fetchone()
+        inside = site < code.end_of(owner, following)
+        names.add(f"{row[1]}[{row[0]} {row[2]}]" + ("" if inside else "   (in a block or function after it)"))
     return sorted(names)
 
 
@@ -346,15 +401,16 @@ def load(image_name):
 def main(argv):
     raw = "--raw" in argv
     wanted = [argument for argument in argv[1:] if not argument.startswith("--")]
-    if "--to" in argv and wanted:
+    if ("--to" in argv or "--uses" in argv) and wanted:
         db = sqlite3.connect(db_path())
+        search, verb = (senders, "send") if "--to" in argv else (users_of, "use")
         total = 0
         for image_name in ("Instagram", "FBSharedFramework"):
-            names = senders(load(image_name), db, image_name, wanted[0])
+            names = search(load(image_name), db, image_name, wanted[0])
             for name in names or []:
                 print(name)
             total += len(names or [])
-        print(f"{total} methods send {wanted[0]} in Instagram {pinned_version()}", file=sys.stderr)
+        print(f"{total} methods {verb} {wanted[0]} in Instagram {pinned_version()}", file=sys.stderr)
         return 0
     match = re.fullmatch(r"\s*([-+])\[\s*(\S+)\s+(\S+)\s*\]\s*", wanted[0]) if wanted else None
     if not match:
