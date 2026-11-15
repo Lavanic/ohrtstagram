@@ -17,7 +17,8 @@ This looks each one up in the index made by `classdump.py build` and says:
   ok       everything the hook names is on the class or one it inherits from
 
 It also lists classes the code looks up by name (%c(...), NSClassFromString,
-objc_getClass) that no longer exist.
+objc_getClass) that no longer exist, and methods it calls by name
+(NSSelectorFromString, OhrtCall) that no class in the app has.
 
 A hook that passes can still be wrong: a method that kept its name may do
 something else now. Only the phone settles that.
@@ -41,6 +42,7 @@ HOOK = re.compile(r"^[ \t]*%hook[ \t]+([A-Za-z_$][A-Za-z0-9_.$]*)", re.M)
 END = re.compile(r"^[ \t]*%end\b", re.M)
 METHOD = re.compile(r"^[ \t]*(%new[^\n]*?)?[ \t]*([-+])[ \t]*\(((?:[^()]|\([^()]*\))*)\)[ \t]*([^{;]*?)[ \t\n]*\{", re.M)
 ARGUMENT = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)?[ \t\n]*:[ \t\n]*\(((?:[^()]|\([^()]*\))*)\)[ \t\n]*[A-Za-z_][A-Za-z0-9_]*")
+BY_NAME = re.compile(r"(?:OhrtCall(?:Bool|Void)?\([^;\n]*?,\s*@\"|NSSelectorFromString\(\s*@\")([A-Za-z_][A-Za-z0-9_:]*)\"")
 LOOKUP = re.compile(r"(?:%c\(\s*|NSClassFromString\(\s*@\"|objc_getClass\(\s*\"|objc_lookUpClass\(\s*\")([A-Za-z_$][A-Za-z0-9_.$]*)")
 
 STRUCTS = {"CGRect", "CGPoint", "CGSize", "UIEdgeInsets", "NSRange", "CGAffineTransform", "CMTime", "CGVector",
@@ -189,8 +191,26 @@ class App:
                          self._system) is not None
 
 
+def own_classes():
+    """Classes the tweak defines itself, which it may also hook."""
+    names = set()
+    root = os.path.normpath(os.path.join(HERE, "..", ".."))
+    for folder in ("src", os.path.join("ohrt", "src")):
+        for path, _, files in os.walk(os.path.join(root, folder)):
+            for name in files:
+                if name.endswith((".m", ".mm", ".x", ".xm")):
+                    with open(os.path.join(path, name), errors="replace") as handle:
+                        names.update(re.findall(r"^@implementation\s+([A-Za-z_][A-Za-z0-9_]*)", handle.read(), re.M))
+    return names
+
+
+OWN = own_classes()
+
+
 def audit_hook(app, cls, methods):
     """Returns (status, [notes])."""
+    if cls in OWN:
+        return "own", []
     name = app.resolve(cls)
     if name is None:
         if re.match(r"^(UI|NS|CA|AV|WK|SF|PH|MK|CL|UN|CK|_UI|QL|LS)[A-Z]", cls):
@@ -250,14 +270,14 @@ def main(argv):
         else:
             files.append(root)
 
-    counts = {"ok": 0, "system": 0, "types": 0, "partly": 0, "gone": 0}
-    lookups_gone = []
+    counts = {"ok": 0, "system": 0, "own": 0, "types": 0, "partly": 0, "gone": 0}
+    lookups_gone, calls_gone = [], []
     for path in sorted(files):
         if path.endswith((".x", ".xm")):
             for cls, line, methods in hooks_in(path):
                 status, notes = audit_hook(app, cls, methods)
                 counts[status] += 1
-                if status in ("ok", "system") and not show_all:
+                if status in ("ok", "system", "own") and not show_all:
                     continue
                 print(f"{status:7s} {cls}  ({path}:{line})")
                 for note in notes:
@@ -268,15 +288,24 @@ def main(argv):
             cls = match.group(1)
             if app.resolve(cls) is None and not re.match(r"^(UI|NS|CA|AV|WK|SF|PH|MK|CL|UN|CK|_UI|QL|LS|FLEX|JG)[A-Z_]", cls):
                 lookups_gone.append(f"{cls}  ({path}:{text.count(chr(10), 0, match.start()) + 1})")
+        for match in BY_NAME.finditer(text):
+            selector = match.group(1)
+            if not app.anywhere(selector) and not app.system_has(selector):
+                calls_gone.append(f"{selector}  ({path}:{text.count(chr(10), 0, match.start()) + 1})")
 
     if lookups_gone:
         print("\nlooked up by name, but not in the app:")
         for line in sorted(set(lookups_gone)):
             print("  " + line)
+    if calls_gone:
+        print("\ncalled by name, but on no class in the app:")
+        for line in sorted(set(calls_gone)):
+            print("  " + line)
     total = sum(counts.values())
-    print(f"\nInstagram {pinned_version()}, {total} hooks: {counts['ok']} ok, {counts['system']} on Apple's classes, {counts['types']} mistyped, "
+    print(f"\nInstagram {pinned_version()}, {total} hooks: {counts['ok']} ok, {counts['system']} on Apple's classes, {counts['own']} on the tweak's own, "
+          f"{counts['types']} mistyped, "
           f"{counts['partly']} partly gone, {counts['gone']} gone")
-    return 1 if counts["types"] or counts["partly"] or counts["gone"] else 0
+    return 1 if counts["types"] or counts["partly"] or counts["gone"] or lookups_gone or calls_gone else 0
 
 
 if __name__ == "__main__":

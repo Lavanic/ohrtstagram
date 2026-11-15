@@ -71,7 +71,8 @@ done
 [ -n "$(ls -A modules/FLEXing 2>/dev/null)" ] || die "submodules are missing: git submodule update --init --recursive"
 [ -f ohrt/modules/zxPluginsInject/fishhook/fishhook.c ] || die "submodules are missing: git submodule update --init --recursive"
 
-VERSION="$(awk '/^Version:/ {print $2; exit}' control)"
+VERSION="$(sed -n 's/^#define OHRT_VERSION @"\(.*\)"$/\1/p' ohrt/src/Ohrt.h)"
+[ -n "$VERSION" ] || die "no OHRT_VERSION in ohrt/src/Ohrt.h"
 PIN="$(tr -d '[:space:]' < ohrt/instagram-version)"
 
 # ohrt/exclude.txt names the upstream files we do not build. They stay in the
@@ -80,17 +81,20 @@ excluded() {
     [ "$STOCK" -eq 0 ] && [ -f ohrt/exclude.txt ] && grep -v -E '^\s*(#|$)' ohrt/exclude.txt | sed 's/[[:space:]]*#.*$//' | grep -q -x -F "$1"
 }
 
+# Ours go last. Hooks are installed in link order and the last one installed
+# on a method runs first, so where upstream and ohrt/src hook the same
+# method, ours is the outer one: it sees upstream's result.
 sources() {
-    find src -type f \( -iname '*.x' -o -iname '*.xm' -o -iname '*.m' \) | while read -r file; do
+    find src -type f \( -iname '*.x' -o -iname '*.xm' -o -iname '*.m' \) | sort | while read -r file; do
         excluded "$file" || echo "$file"
     done
     ls modules/JGProgressHUD/*.m
     find ohrt/linux -type f -name '*.m'
     if [ "$STOCK" -eq 0 ] && [ -d ohrt/src ]; then
-        find ohrt/src -type f \( -iname '*.x' -o -iname '*.xm' -o -iname '*.m' \)
+        find ohrt/src -type f \( -iname '*.x' -o -iname '*.xm' -o -iname '*.m' \) | sort
     fi
 }
-FILES="$(sources | sort | tr '\n' ' ')"
+FILES="$(sources | tr '\n' ' ')"
 
 if [ "$QUICK" -eq 0 ]; then
     make clean >/dev/null 2>&1 || true
@@ -129,6 +133,26 @@ if [ "$WITH_FLEX" -eq 1 ]; then
     FLEX_DYLIB="modules/FLEXing/libflex/.theos/obj/libFLEX.dylib"
     [ -f "$FLEX_DYLIB" ] || die "libFLEX.dylib was not built"
 fi
+
+# Our hooks are checked against the pinned Instagram before anything is
+# packaged: a class or method that is not there fails the build here, not
+# silently on the phone.
+audit() {
+    local index="packages/classes-$PIN.sqlite"
+    if [ ! -f "$index" ]; then
+        local source
+        source="$(find packages -maxdepth 1 -name "com.burbn.instagram*${PIN}*.ipa" | sort | tail -n 1)"
+        if [ -z "$source" ]; then
+            printf '\033[1;33mwarning:\033[0m no Instagram %s IPA in packages/, so the hooks were not checked\n' "$PIN" >&2
+            return 0
+        fi
+        say "Indexing Instagram $PIN"
+        python3 ohrt/tools/classdump.py build "$source" >/dev/null
+    fi
+    say "Checking our hooks against Instagram $PIN"
+    python3 ohrt/tools/hookaudit.py ohrt/src || die "ohrt/src hooks something Instagram $PIN does not have"
+}
+[ "$STOCK" -eq 1 ] || audit
 
 if [ "$TWEAK_ONLY" -eq 1 ]; then
     say "Built $TWEAK"
