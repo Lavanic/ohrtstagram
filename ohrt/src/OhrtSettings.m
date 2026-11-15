@@ -179,6 +179,9 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
     ], nil)];
     [debug addObject:OhrtSection(@"Self-check", @[
         [SCISetting staticCellWithTitle:@"This Instagram" subtitle:OhrtSelfCheck() icon:nil],
+        [SCISetting buttonCellWithTitle:@"Copy" subtitle:@"" icon:nil action:^{
+            [UIPasteboard generalPasteboard].string = OhrtSelfCheck();
+        }],
     ], @"What each ohrtstagram feature needs from Instagram, looked up in the app that is running.")];
     [sections addObject:OhrtSection(nil, @[ OhrtPage(@"Debug", @"ladybug", debug) ], nil)];
 
