@@ -1,15 +1,25 @@
 // Following feed: home shows only the accounts you follow, newest first.
 //
-// Instagram already has this feed, as the "Following" lane next to "For
-// you". Each session keeps a view model for both, and this makes the home
-// tab use the following one. The approach is the one InstaSane
-// (github.com/n3d1117/InstaSane) and Sparkle take, cut down to the methods
-// Instagram 418.2.0 has.
+// Instagram already has this feed. Where the law makes it offer a feed that
+// is not ranked for you, the home tab has two lanes, "For you" and
+// "Following", and remembers which one you chose. Every session keeps a
+// view model for each, and one method picks between them (read out of
+// 418.2.0 with ohrt/tools/calls.py):
+//
+//   -[IGUserSession selectedMainFeedViewModel]
+//       if the lanes are enabled and the remembered lane is 1,
+//           the following one; otherwise the main one.
+//
+// That method is the hook. The two questions it asks are answered by a Swift
+// class, and Swift code that asks them does not go through anything a hook
+// can reach, so switching the lanes on from here would only switch them on
+// for half the app. The remembered lane is still set to 1, which is all it
+// takes for someone who has the lanes for real.
+//
+// InstaSane (github.com/n3d1117/InstaSane) found the lane number, and
+// Sparkle the method.
 #import "../../src/InstagramHeaders.h"
 #import "Ohrt.h"
-
-// Instagram's number for "Following" among the feeds in the picker.
-static const NSInteger kOhrtPickerFollowing = 5;
 
 %group OhrtFollowing
 
@@ -21,28 +31,8 @@ static const NSInteger kOhrtPickerFollowing = 5;
 
 // Demangled name: IGDSAShared.IGDSAGatingManager
 %hook _TtC11IGDSAShared18IGDSAGatingManager
-// The lane Instagram remembers as the user's choice. 1 is Following.
 - (NSInteger)feedStickyContentLaneSelection {
     return 1;
-}
-%end
-
-%hook IGHomeFeedPickerMenuController
-- (id)initWithUserSession:(id)session menuItems:(NSArray *)items homeFeedViewModel:(id)viewModel analyticsModule:(id)module navigationController:(id)navigation isForYouContentLaneEnabled:(BOOL)forYou {
-    if ([items isKindOfClass:[NSArray class]]) {
-        NSMutableArray *reordered = [items mutableCopy];
-        [reordered removeObject:@(kOhrtPickerFollowing)];
-        [reordered insertObject:@(kOhrtPickerFollowing) atIndex:0];
-        items = reordered;
-    }
-    return %orig(session, items, viewModel, module, navigation, forYou);
-}
-%end
-
-%hook IGHomeFeedHeaderView
-- (void)setTitle:(id)title animated:(BOOL)animated {
-    if ([title isKindOfClass:[NSString class]] && [title isEqualToString:@"For you"]) title = @"Following";
-    %orig(title, animated);
 }
 %end
 
