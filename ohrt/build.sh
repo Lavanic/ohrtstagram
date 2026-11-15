@@ -161,6 +161,8 @@ audit() {
     fi
     say "Checking our hooks against Instagram $PIN"
     python3 ohrt/tools/hookaudit.py ohrt/src || die "ohrt/src hooks something Instagram $PIN does not have"
+    # And that the methods they lean on still do what the hooks assume.
+    python3 ohrt/tests/facts_test.py || die "Instagram $PIN does not behave the way ohrt/src assumes"
 }
 [ "$STOCK" -eq 1 ] || audit
 
