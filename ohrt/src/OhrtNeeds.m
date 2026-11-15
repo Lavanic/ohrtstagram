@@ -22,9 +22,11 @@ typedef struct {
 static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("following", "IGUserSession", "selectedMainFeedViewModel"),
     OHRT_NEED("following", "IGUserSession", "_followingMainFeedViewModel"),
+    OHRT_NEED("following", "IGMainFeedNetworkSource", "updatePaginationSource:nextMaxID:"),
 
     OHRT_NEED("wall", "IGUserSession", "selectedMainFeedViewModel"),
     OHRT_NEED("wall", "IGUserSession", "_followingMainFeedViewModel"),
+    OHRT_NEED("wall", "IGMainFeedNetworkSource", "updatePaginationSource:nextMaxID:"),
     OHRT_NEED("wall", "IGMainFeedListAdapterDataSource", "objectsForListAdapter:"),
     OHRT_NEED("wall", "IGMainFeedContext", "viewModel"),
     OHRT_NEED("wall", "IGMainFeedViewModel", "fetchMoreItemsWithPrefetchType:"),

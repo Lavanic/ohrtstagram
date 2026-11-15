@@ -24,6 +24,14 @@ from classdump import db_path, pinned_version  # noqa: E402
 FACTS = [
     ("following feed", "-[IGUserSession selectedMainFeedViewModel]",
      ["[... mainFeedViewModel]", "[... _followingMainFeedViewModel]", "[... feedStickyContentLaneSelection]"]),
+    ("following feed", "-[IGMainFeedNetworkSource updatePaginationSource:nextMaxID:]",
+     ["[... setPaginationSource:]", "[... setNextMaxID:]"]),
+    ("following feed",
+     "-[IGMainFeedNetworkSource initWithPosts:nextMaxID:initialPaginationSource:fetchPath:fetcher:responseParser:"
+     "mainFeedNetworkSourceSessionDeps:sessionId:analyticsModule:timeSinceLastHeadLoadFetchKeySuffix:useNewUIGraph:]",
+     ["[... updatePaginationSource:nextMaxID:]"]),
+    ("following feed", "-[IGMainFeedViewModel updatePaginationSource:nextMaxID:]",
+     ["[... updatePaginationSource:nextMaxID:]"]),
     ("DM mode", "-[IGTabBarController _tabBarHasDirectInbox]",
      ["ivar _tabBarSurfaces", "[... directInbox]", "[... containsObject:]"]),
     ("DM mode", "-[IGTabBarController _directInboxButtonPressed]",
