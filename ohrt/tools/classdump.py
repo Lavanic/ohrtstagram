@@ -169,7 +169,7 @@ class Image:
             yield self.pointer(address + index * 8)
 
     def methods(self, address):
-        """(selector, type encoding) for each entry of a method list."""
+        """(selector, type encoding, address of the code) for each entry of a method list."""
         if not isinstance(address, int) or address & 1:
             return
         header, count = self.u32(address), self.u32(address + 4)
@@ -182,11 +182,15 @@ class Image:
                 name_at = entry + self.i32(entry)
                 name = self.string(name_at) if header & DIRECT_SELECTORS else self.string(self.pointer(name_at))
                 types = self.string(entry + 4 + self.i32(entry + 4))
+                code = self.i32(entry + 8)
+                code = entry + 8 + code if code else 0
             else:
                 name = self.string(self.pointer(entry))
                 types = self.string(self.pointer(entry + 8))
+                code = self.pointer(entry + 16)
+                code = code if isinstance(code, int) else 0
             if name:
-                yield name, types or ""
+                yield name, types or "", code
             entry += entry_size
 
     def ivars(self, address):
@@ -199,7 +203,8 @@ class Image:
             entry = address + 8 + index * entry_size
             name = self.string(self.pointer(entry + 8))
             if name:
-                yield name, self.string(self.pointer(entry + 16)) or ""
+                slot = self.pointer(entry)
+                yield name, self.string(self.pointer(entry + 16)) or "", slot if isinstance(slot, int) else 0
 
     def properties(self, address):
         if not isinstance(address, int):
@@ -259,15 +264,15 @@ def read_image(image, label, rows):
             if not name:
                 continue
             classes.append((name, image.class_name(image.pointer(address + 8)), label, swift_alias(name)))
-            for selector, types in image.methods(image.pointer(ro + 32)):
-                methods.append((name, "-", selector, types, None))
+            for selector, types, code in image.methods(image.pointer(ro + 32)):
+                methods.append((name, "-", selector, types, None, code, label))
             meta = image.pointer(address)
             meta_ro = image.class_ro(meta) if isinstance(meta, int) else None
             if meta_ro is not None:
-                for selector, types in image.methods(image.pointer(meta_ro + 32)):
-                    methods.append((name, "+", selector, types, None))
-            for ivar, kind in image.ivars(image.pointer(ro + 48)):
-                ivars.append((name, ivar, kind))
+                for selector, types, code in image.methods(image.pointer(meta_ro + 32)):
+                    methods.append((name, "+", selector, types, None, code, label))
+            for ivar, kind, slot in image.ivars(image.pointer(ro + 48)):
+                ivars.append((name, ivar, kind, slot, label))
             for prop, attributes in image.properties(image.pointer(ro + 64)):
                 properties.append((name, prop, attributes))
 
@@ -279,10 +284,10 @@ def read_image(image, label, rows):
             name = image.class_name(image.pointer(address + 8))
             if not name:
                 continue
-            for selector, types in image.methods(image.pointer(address + 16)):
-                methods.append((name, "-", selector, types, category))
-            for selector, types in image.methods(image.pointer(address + 24)):
-                methods.append((name, "+", selector, types, category))
+            for selector, types, code in image.methods(image.pointer(address + 16)):
+                methods.append((name, "-", selector, types, category, code, label))
+            for selector, types, code in image.methods(image.pointer(address + 24)):
+                methods.append((name, "+", selector, types, category, code, label))
             for prop, attributes in image.properties(image.pointer(address + 40)):
                 properties.append((name, prop, attributes))
 
@@ -313,21 +318,23 @@ def build(ipa):
     db = sqlite3.connect(path)
     db.executescript("""
         create table classes (name text, super text, image text, alias text);
-        create table methods (class text, kind text, sel text, types text, category text);
-        create table ivars (class text, name text, type text);
+        create table methods (class text, kind text, sel text, types text, category text, code integer, image text);
+        create table ivars (class text, name text, type text, slot integer, image text);
         create table props (class text, name text, attrs text);
     """)
     classes, methods, ivars, properties = rows
     db.executemany("insert into classes values (?,?,?,?)", classes)
-    db.executemany("insert into methods values (?,?,?,?,?)", methods)
-    db.executemany("insert into ivars values (?,?,?)", ivars)
+    db.executemany("insert into methods values (?,?,?,?,?,?,?)", methods)
+    db.executemany("insert into ivars values (?,?,?,?,?)", ivars)
     db.executemany("insert into props values (?,?,?)", properties)
     db.executescript("""
         create index classes_name on classes (name);
         create index classes_alias on classes (alias);
         create index methods_class on methods (class);
         create index methods_sel on methods (sel);
+        create index methods_code on methods (image, code);
         create index ivars_class on ivars (class);
+        create index ivars_slot on ivars (image, slot);
         create index props_class on props (class);
     """)
     db.commit()
