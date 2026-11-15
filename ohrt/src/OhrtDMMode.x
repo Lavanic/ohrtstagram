@@ -18,10 +18,14 @@ static char kOhrtLandedKey;
     if (objc_getAssociatedObject(self, &kOhrtLandedKey)) return;
     objc_setAssociatedObject(self, &kOhrtLandedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
-    if (OhrtCallBool(self, @"_tabBarHasDirectInbox")) {
+    __block BOOL landed = NO;
+    BOOL ran = OhrtTry(@"DM mode", ^{
+        if (!OhrtCallBool(self, @"_tabBarHasDirectInbox")) return;
         OhrtCallVoid(self, @"_directInboxButtonPressed");
-        return;
-    }
+        landed = YES;
+    });
+    OhrtLog(@"DM mode: %@", landed ? @"opened on the inbox" : ran ? @"this tab bar has no inbox tab" : @"failed");
+    if (landed) return;
     // Some accounts still have the tab bar without Messages in it. With the
     // home tab hidden as well there would be nowhere to land, so DM mode
     // stands down and says why.

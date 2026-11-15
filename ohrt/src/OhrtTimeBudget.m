@@ -9,6 +9,7 @@
 
 #import "../../src/Utils.h"
 #import "Ohrt.h"
+#import "OhrtLogic.h"
 
 NSString *const kOhrtBudgetMinutesKey = @"ohrt_time_budget_minutes";
 
@@ -46,9 +47,9 @@ NSTimeInterval OhrtTimeSpentToday(void) {
 }
 
 NSString *OhrtFormatDuration(NSTimeInterval seconds) {
-    NSInteger minutes = (NSInteger)llround(seconds / 60.0);
-    if (minutes < 60) return [NSString stringWithFormat:@"%ldm", (long)minutes];
-    return [NSString stringWithFormat:@"%ldh %02ldm", (long)(minutes / 60), (long)(minutes % 60)];
+    char text[32];
+    OhrtDurationText(seconds, text, sizeof(text));
+    return @(text);
 }
 
 @interface OhrtLockViewController : UIViewController
@@ -148,9 +149,7 @@ NSString *OhrtFormatDuration(NSTimeInterval seconds) {
 
 - (void)tick {
     CFTimeInterval now = CACurrentMediaTime();
-    // A long gap means the app was suspended in between, which is not time
-    // spent in it.
-    CFTimeInterval elapsed = MIN(MAX(now - self.lastTick, 0), kOhrtTick * 2);
+    CFTimeInterval elapsed = OhrtCountedTime(now - self.lastTick, kOhrtTick);
     self.lastTick = now;
 
     OhrtRollDay();
@@ -165,10 +164,9 @@ NSString *OhrtFormatDuration(NSTimeInterval seconds) {
 
 - (void)evaluate {
     NSInteger budget = [self budgetMinutes];
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSTimeInterval spent = OhrtTimeSpentToday();
-    NSInteger allowed = budget + [defaults integerForKey:kOhrtExtraMinutesKey];
-    if (budget > 0 && spent >= allowed * 60.0) [self showLockForBudget:budget spent:spent];
+    NSInteger extra = [[NSUserDefaults standardUserDefaults] integerForKey:kOhrtExtraMinutesKey];
+    if (OhrtOverBudget(spent, budget, extra)) [self showLockForBudget:budget spent:spent];
     else [self hideLock];
 }
 
@@ -198,6 +196,9 @@ NSString *OhrtFormatDuration(NSTimeInterval seconds) {
         window.windowLevel = UIWindowLevelStatusBar + 50;
         window.rootViewController = controller;
         self.lockWindow = window;
+        // The keyboard sits above every window of the app, this one too.
+        [[UIApplication sharedApplication] sendAction:@selector(resignFirstResponder) to:nil from:nil forEvent:nil];
+        OhrtLog(@"time budget: %ld minutes reached, lock shown", (long)budget);
     }
     OhrtLockViewController *controller = (OhrtLockViewController *)self.lockWindow.rootViewController;
     [controller loadViewIfNeeded];

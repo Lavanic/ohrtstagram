@@ -25,7 +25,13 @@
 
 %hook IGUserSession
 - (id)selectedMainFeedViewModel {
-    return OhrtCall(self, @"_followingMainFeedViewModel") ?: %orig;
+    id following = OhrtCall(self, @"_followingMainFeedViewModel");
+    static BOOL said;
+    if (!said) {
+        said = YES;
+        OhrtLog(@"following feed: %@", following ? @"home uses the following lane" : @"no following lane on this session, home is unchanged");
+    }
+    return following ?: %orig;
 }
 %end
 

@@ -89,6 +89,26 @@ static inline OhrtScanStep OhrtAfterPage(int moreAvailable, size_t usersBefore, 
     return OhrtScanGoOn;
 }
 
+typedef enum {
+    OhrtFailRetry,        // ask for the same page again
+    OhrtFailInterrupted,  // give up, and blame nobody
+    OhrtFailRefused,      // Instagram would not answer
+} OhrtFailure;
+
+// What a page that failed, or never came, means. `interrupted` says the app
+// left the screen or the connection dropped while it was awaited; that is
+// worth a few more tries and is not held against the account.
+static inline OhrtFailure OhrtAfterFailure(int interrupted, unsigned retries, unsigned maxRetries) {
+    if (!interrupted) return OhrtFailRefused;
+    return retries < maxRetries ? OhrtFailRetry : OhrtFailInterrupted;
+}
+
+// Whether a list that was read is short of what Instagram says it holds by
+// more than deleted and deactivated accounts would explain.
+static inline int OhrtListLooksShort(long read, long expected) {
+    return expected > 0 && read < expected - expected / 10 - 5;
+}
+
 // Hours to wait after Instagram has refused a check `failures` times running.
 static inline double OhrtRefusalWaitHours(long failures) {
     if (failures <= 1) return 12;

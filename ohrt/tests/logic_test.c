@@ -85,6 +85,19 @@ static void follow_back(void) {
     empty = 1;
     CHECK("the last page may be empty", OhrtAfterPage(0, 50, 50, &empty, 4, 600) == OhrtScanWhole);
 
+    CHECK("a failure out of the blue is a refusal", OhrtAfterFailure(0, 0, 3) == OhrtFailRefused);
+    CHECK("a failure while away is retried", OhrtAfterFailure(1, 0, 3) == OhrtFailRetry);
+    CHECK("and again", OhrtAfterFailure(1, 2, 3) == OhrtFailRetry);
+    CHECK("but not for ever", OhrtAfterFailure(1, 3, 3) == OhrtFailInterrupted);
+
+    CHECK("a full list is not short", !OhrtListLooksShort(2497, 2497));
+    CHECK("a few missing are deactivated accounts", !OhrtListLooksShort(2480, 2497));
+    CHECK("a tenth missing is still let through", !OhrtListLooksShort(2250, 2497));
+    CHECK("half missing is short", OhrtListLooksShort(1200, 2497));
+    CHECK("an unknown count says nothing", !OhrtListLooksShort(10, 0));
+    CHECK("a small list missing a couple is not short", !OhrtListLooksShort(8, 12));
+    CHECK("a small list mostly missing is short", OhrtListLooksShort(2, 30));
+
     CHECK("first refusal", OhrtRefusalWaitHours(1) == 12);
     CHECK("second refusal", OhrtRefusalWaitHours(2) == 24);
     CHECK("third refusal", OhrtRefusalWaitHours(3) == 48);

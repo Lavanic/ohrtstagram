@@ -11,6 +11,7 @@
 
 #import "../../src/InstagramHeaders.h"
 #import "Ohrt.h"
+#import "OhrtLogic.h"
 
 // Seconds since 1970 of the newest post that was above the wall when it was
 // last reached.
@@ -33,7 +34,7 @@ static char kOhrtExtraHeightKey;
 
 static NSTimeInterval OhrtSavedMark(void) {
     NSTimeInterval saved = [[NSUserDefaults standardUserDefaults] doubleForKey:kOhrtCaughtUpKey];
-    return saved > 0 ? saved : [NSDate date].timeIntervalSince1970 - kOhrtFirstWindow;
+    return OhrtWallMark(saved, [NSDate date].timeIntervalSince1970, kOhrtFirstWindow);
 }
 
 #pragma mark - Room for the wall at the end of the list
@@ -225,43 +226,48 @@ static BOOL OhrtIsFollowingFeed(id dataSource, id viewModel) {
 }
 
 // The objects up to the first old post. `newest` is set to the time of the
-// newest post kept; `cut` says whether anything was left out.
+// newest post kept; `cut` says whether anything was left out. Where to cut
+// is decided in OhrtLogic.h; this only tells it what each object is.
 static NSArray *OhrtCutAtWall(NSArray *objects, NSTimeInterval *newest, BOOL *cut) {
     Class media = objc_getClass("IGMedia");
-    if (!media) return objects;
-    NSUInteger end = NSNotFound;
-    for (NSUInteger index = 0; index < objects.count; index++) {
-        id object = objects[index];
-        if (![object isKindOfClass:media]) continue;
-        NSDate *date = OhrtCall(object, @"takenAtDate");
-        if (![date isKindOfClass:[NSDate class]]) continue;
-        NSTimeInterval taken = date.timeIntervalSince1970;
-        if (taken <= gCutoff) {
-            end = index;
-            break;
+    NSUInteger count = objects.count;
+    if (!media || !count) return objects;
+    // What can be left dangling at the end of a cut: a loading spinner,
+    // Instagram's own end marker, a header for the next group.
+    static NSArray<Class> *trailers;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSMutableArray<Class> *found = [NSMutableArray array];
+        for (NSString *name in @[ @"IGSpinnerLabelViewModel", @"IGEndOfFeedDemarcatorModel", @"IGFeedGroupHeaderViewModel" ]) {
+            Class cls = NSClassFromString(name);
+            if (cls) [found addObject:cls];
         }
-        if (taken > *newest) *newest = taken;
-    }
-    if (end == NSNotFound) return objects;
-    *cut = YES;
+        trailers = found;
+    });
 
-    // What is left dangling at the end belonged to what was cut: a header
-    // for the next group, Instagram's own end marker, a loading spinner.
-    NSArray<Class> *trailers = @[
-        objc_getClass("IGSpinnerLabelViewModel") ?: [NSNull class],
-        objc_getClass("IGEndOfFeedDemarcatorModel") ?: [NSNull class],
-        objc_getClass("IGFeedGroupHeaderViewModel") ?: [NSNull class],
-    ];
-    while (end > 0) {
-        id last = objects[end - 1];
-        BOOL trailer = NO;
-        for (Class cls in trailers) {
-            if ([last isKindOfClass:cls]) trailer = YES;
+    OhrtFeedItem *items = calloc(count, sizeof(OhrtFeedItem));
+    if (!items) return objects;
+    for (NSUInteger index = 0; index < count; index++) {
+        id object = objects[index];
+        if ([object isKindOfClass:media]) {
+            NSDate *date = OhrtCall(object, @"takenAtDate");
+            if ([date isKindOfClass:[NSDate class]]) {
+                items[index].kind = OhrtFeedPost;
+                items[index].taken = date.timeIntervalSince1970;
+            }
+            continue;
         }
-        if (!trailer) break;
-        end--;
+        for (Class cls in trailers) {
+            if ([object isKindOfClass:cls]) items[index].kind = OhrtFeedTrailer;
+        }
     }
-    return [objects subarrayWithRange:NSMakeRange(0, end)];
+    double newestKept = 0;
+    size_t keep = OhrtWallKeep(items, count, gCutoff, &newestKept);
+    free(items);
+    *newest = newestKept;
+    if (keep >= count) return objects;
+    *cut = YES;
+    return [objects subarrayWithRange:NSMakeRange(0, keep)];
 }
 
 %group OhrtWall
@@ -271,20 +277,46 @@ static NSArray *OhrtCutAtWall(NSArray *objects, NSTimeInterval *newest, BOOL *cu
     NSArray *objects = %orig;
     if (![objects isKindOfClass:[NSArray class]]) return objects;
 
+    __block NSArray *kept = objects;
+    __block BOOL cut = NO;
+    __block NSTimeInterval newest = 0;
     id viewModel = OhrtFeedViewModel(self);
-    BOOL cut = NO;
-    NSTimeInterval newest = 0;
-    if (OhrtIsFollowingFeed(self, viewModel)) {
-        objects = OhrtCutAtWall(objects, &newest, &cut);
+    BOOL ran = OhrtTry(@"wall", ^{
+        if (!OhrtIsFollowingFeed(self, viewModel)) return;
+        kept = OhrtCutAtWall(objects, &newest, &cut);
         gAdapter = adapter;
+    });
+    if (!ran) {
+        // Something about this Instagram is not what the wall expects. The
+        // feed goes back to being whole.
+        kept = objects;
+        cut = NO;
     }
     if (viewModel) objc_setAssociatedObject(viewModel, &kOhrtWalledKey, cut ? @YES : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    static NSUInteger lastKept = NSNotFound, lastCount = NSNotFound;
+    if (cut && (kept.count != lastKept || objects.count != lastCount)) {
+        lastKept = kept.count;
+        lastCount = objects.count;
+        OhrtLog(@"wall: showing %lu of %lu feed items", (unsigned long)kept.count, (unsigned long)objects.count);
+    }
+    objects = kept;
 
     // The list is in the middle of working out an update here. The wall is
     // put up once that is done.
     __weak id weakAdapter = adapter;
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (weakAdapter) OhrtShowWall(weakAdapter, cut, newest);
+        id strongAdapter = weakAdapter;
+        if (!strongAdapter) return;
+        BOOL shown = OhrtTry(@"wall", ^{
+            OhrtShowWall(strongAdapter, cut, newest);
+        });
+        if (shown) return;
+        // The wall is off for this run; a line left behind from before
+        // would be a lie.
+        @try {
+            OhrtShowWall(strongAdapter, NO, 0);
+        } @catch (NSException *exception) {
+        }
     });
     return objects;
 }
