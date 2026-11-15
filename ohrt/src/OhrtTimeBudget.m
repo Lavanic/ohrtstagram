@@ -20,6 +20,13 @@ static NSString *const kOhrtExtraMinutesKey = @"ohrt_time_extra_minutes";
 static const NSTimeInterval kOhrtTick = 5.0;
 static const NSInteger kOhrtExtraStep = 5;
 
+// Time counted but not yet written down. Every write to the preferences
+// tells the whole app they changed, Instagram's own listeners included, so
+// the count is written twice a minute and when the app is left, not on
+// every tick.
+static NSTimeInterval gOhrtUnsaved;
+static const NSTimeInterval kOhrtSaveEvery = 30.0;
+
 static NSString *OhrtToday(void) {
     static NSDateFormatter *formatter;
     static dispatch_once_t once;
@@ -39,11 +46,19 @@ static void OhrtRollDay(void) {
     [defaults setObject:today forKey:kOhrtDayKey];
     [defaults setDouble:0 forKey:kOhrtSecondsKey];
     [defaults setInteger:0 forKey:kOhrtExtraMinutesKey];
+    gOhrtUnsaved = 0;
+}
+
+static void OhrtSaveTime(void) {
+    if (gOhrtUnsaved <= 0) return;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setDouble:[defaults doubleForKey:kOhrtSecondsKey] + gOhrtUnsaved forKey:kOhrtSecondsKey];
+    gOhrtUnsaved = 0;
 }
 
 NSTimeInterval OhrtTimeSpentToday(void) {
     OhrtRollDay();
-    return [[NSUserDefaults standardUserDefaults] doubleForKey:kOhrtSecondsKey];
+    return [[NSUserDefaults standardUserDefaults] doubleForKey:kOhrtSecondsKey] + gOhrtUnsaved;
 }
 
 NSString *OhrtFormatDuration(NSTimeInterval seconds) {
@@ -143,6 +158,7 @@ NSString *OhrtFormatDuration(NSTimeInterval seconds) {
 
 - (void)resignedActive {
     [self tick];
+    OhrtSaveTime();
     [self.timer invalidate];
     self.timer = nil;
 }
@@ -153,8 +169,8 @@ NSString *OhrtFormatDuration(NSTimeInterval seconds) {
     self.lastTick = now;
 
     OhrtRollDay();
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setDouble:[defaults doubleForKey:kOhrtSecondsKey] + elapsed forKey:kOhrtSecondsKey];
+    gOhrtUnsaved += elapsed;
+    if (gOhrtUnsaved >= kOhrtSaveEvery) OhrtSaveTime();
     [self evaluate];
 }
 
