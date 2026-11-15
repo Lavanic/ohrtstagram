@@ -51,10 +51,19 @@ static void OhrtGuardStep(void (^event)(void)) {
 BOOL OhrtSafeLaunch(void) {
     static dispatch_once_t once;
     __block BOOL first = NO;
+    // A process iOS loaded ahead of time may not be able to read the
+    // preferences yet, and the switch in the Settings app can still change
+    // before the app is opened in it. Until it is, this answers from what
+    // can be read now and keeps nothing.
+    if (OhrtPrewarmed() && !gOhrtLaunching) {
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        OhrtGuard peek;
+        OhrtGuardStart(&peek, [defaults integerForKey:kOhrtUnfinishedKey]);
+        return peek.safe || [defaults boolForKey:kOhrtForceSafeKey];
+    }
     dispatch_once(&once, ^{
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         OhrtGuardStart(&gOhrtGuard, [defaults integerForKey:kOhrtUnfinishedKey]);
-        if (OhrtPrewarmed() && !gOhrtLaunching) OhrtGuardNotAskedFor(&gOhrtGuard);
         gOhrtForced = [defaults boolForKey:kOhrtForceSafeKey];
         first = YES;
     });
@@ -140,6 +149,7 @@ __attribute__((constructor)) static void OhrtGuardLoad(void) {
     NSOperationQueue *main = [NSOperationQueue mainQueue];
 
     [center addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil queue:main usingBlock:^(NSNotification *note) {
+        gOhrtLaunching = YES;
         OhrtSafeLaunch();
         BOOL inBackground = [UIApplication sharedApplication].applicationState == UIApplicationStateBackground;
         OhrtGuardStep(^{
@@ -148,6 +158,7 @@ __attribute__((constructor)) static void OhrtGuardLoad(void) {
     }];
 
     [center addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:main usingBlock:^(NSNotification *note) {
+        gOhrtLaunching = YES;
         OhrtSafeLaunch();
         __block int first = 0;
         OhrtGuardStep(^{

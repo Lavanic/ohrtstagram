@@ -375,7 +375,6 @@ static NSString *OhrtSessionAccount(id session) {
     }
     self.followers = nil;
     self.note = nil;
-    [[NSUserDefaults standardUserDefaults] setDouble:[NSDate date].timeIntervalSince1970 forKey:OhrtKey(@"started_at", self.account)];
     OhrtLog(@"follow back: check started");
     [self readList:@"followers" then:^(NSDictionary *followers) {
         self.followers = followers;
@@ -391,6 +390,11 @@ static NSString *OhrtSessionAccount(id session) {
             }];
         });
     }];
+    // Stamped only once something has been asked of Instagram: a check that
+    // stopped before its first request has read nothing and costs no wait.
+    if (self.state != OhrtCheckIdle) {
+        [[NSUserDefaults standardUserDefaults] setDouble:[NSDate date].timeIntervalSince1970 forKey:OhrtKey(@"started_at", self.account)];
+    }
 }
 
 - (void)readList:(NSString *)list then:(void (^)(NSDictionary *users))then {

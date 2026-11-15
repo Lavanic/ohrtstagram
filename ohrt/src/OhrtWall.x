@@ -183,7 +183,8 @@ static void OhrtSetExtraHeight(UICollectionView *list, CGFloat height) {
     // was measured to stand, reaching the wall says nothing about the posts
     // it was measured against, and the mark must not move past them.
     id shown = OhrtCall(self.adapter, @"objects");
-    if (![shown isKindOfClass:[NSArray class]] || [(NSArray *)shown lastObject] != self.lastKept) return;
+    id lastKept = self.lastKept;
+    if (!lastKept || ![shown isKindOfClass:[NSArray class]] || [(NSArray *)shown lastObject] != lastKept) return;
     CGFloat visibleBottom = list.contentOffset.y + list.bounds.size.height - list.adjustedContentInset.bottom;
     if (visibleBottom < CGRectGetMidY(frame)) return;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
