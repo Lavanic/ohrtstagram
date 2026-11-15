@@ -9,8 +9,9 @@
 #   ohrt/build.sh                 build the tweak and inject it into the IPA
 #   ohrt/build.sh --tweak-only    build the dylibs and stop (needs no IPA)
 #
-# The Instagram IPA is yours to supply, decrypted, as
-# packages/com.burbn.instagram*.ipa. Nothing here downloads one.
+# The hooks are written for one Instagram version, named in
+# ohrt/instagram-version. The IPA is yours to supply, decrypted, as
+# packages/com.burbn.instagram_<version>.ipa. Nothing here downloads one.
 # ohrt/tools/vet.py checks one against Apple's signature.
 #
 # Options:
@@ -71,6 +72,7 @@ done
 [ -f ohrt/modules/zxPluginsInject/fishhook/fishhook.c ] || die "submodules are missing: git submodule update --init --recursive"
 
 VERSION="$(awk '/^Version:/ {print $2; exit}' control)"
+PIN="$(tr -d '[:space:]' < ohrt/instagram-version)"
 
 # ohrt/exclude.txt names the upstream files we do not build. They stay in the
 # tree untouched, so pulling from upstream never conflicts on them.
@@ -138,13 +140,14 @@ command -v cyan >/dev/null || die "cyan is not installed (pipx install https://g
 
 if [ -z "$IPA" ]; then
     # Outputs of earlier builds live in packages/ too and are never the input.
-    IPA="$(find packages -maxdepth 1 -name 'com.burbn.instagram*.ipa' | sort -V | tail -n 1)"
-    [ -n "$IPA" ] || die "put your decrypted Instagram IPA at packages/com.burbn.instagram.ipa"
+    IPA="$(find packages -maxdepth 1 -name "com.burbn.instagram*${PIN}*.ipa" | sort | tail -n 1)"
+    [ -n "$IPA" ] || die "put a decrypted Instagram $PIN IPA at packages/com.burbn.instagram_$PIN.ipa"
 fi
 [ -f "$IPA" ] || die "no such IPA: $IPA"
 
 python3 "$ROOT/ohrt/tools/ipa.py" precheck "$IPA"
 IG_VERSION="$(python3 "$ROOT/ohrt/tools/ipa.py" version "$IPA")"
+[ "$IG_VERSION" = "$PIN" ] || printf '\033[1;33mwarning:\033[0m this is Instagram %s; the hooks are written for %s\n' "$IG_VERSION" "$PIN" >&2
 OUT="packages/ohrtstagram_v${VERSION}_IG_v${IG_VERSION}.ipa"
 [ "$STOCK" -eq 0 ] || OUT="packages/ohrtstagram-stock_v${VERSION}_IG_v${IG_VERSION}.ipa"
 rm -f "$OUT"
