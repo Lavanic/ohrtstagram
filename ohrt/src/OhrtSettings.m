@@ -55,6 +55,8 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
 
     [sections addObject:OhrtSection(nil, @[
         OhrtPage(@"Focus", @"moon", [self focusSections]),
+        [SCISetting navigationCellWithTitle:@"Follow back" subtitle:@"" icon:[SCISymbol symbolWithName:@"person.2"]
+                             viewController:OhrtFollowBackScreen()],
     ], nil)];
 
     [sections addObject:OhrtSection(@"Instagram", @[

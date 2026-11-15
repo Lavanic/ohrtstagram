@@ -32,6 +32,9 @@ FOUNDATION_EXPORT UIColor *OhrtColor(uint32_t rgb);
 FOUNDATION_EXPORT NSTimeInterval OhrtTimeSpentToday(void);
 FOUNDATION_EXPORT NSString *OhrtFormatDuration(NSTimeInterval seconds);
 
+// The screen that lists who does not follow back.
+FOUNDATION_EXPORT UIViewController *OhrtFollowBackScreen(void);
+
 // The following feed is on by its own switch, or because the wall needs it.
 FOUNDATION_EXPORT BOOL OhrtFollowingFeedEnabled(void);
 
