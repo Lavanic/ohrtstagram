@@ -20,6 +20,9 @@ typedef struct {
 #define OHRT_NEED_CLASS(feature, cls, selector) {feature, cls, selector, YES}
 
 static const OhrtNeed kOhrtNeeds[] = {
+    OHRT_NEED("start", "IGInstagramAppDelegate", "application:willFinishLaunchingWithOptions:"),
+    OHRT_NEED("start", "IGInstagramAppDelegate", "application:didFinishLaunchingWithOptions:"),
+
     OHRT_NEED("following", "IGUserSession", "selectedMainFeedViewModel"),
     OHRT_NEED("following", "IGUserSession", "_followingMainFeedViewModel"),
     OHRT_NEED("following", "IGMainFeedNetworkSource", "updatePaginationSource:nextMaxID:"),
@@ -110,7 +113,7 @@ NSString *OhrtSelfCheck(void) {
     NSString *instagram = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     [report appendFormat:@"ohrtstagram %@ on Instagram %@, iOS %@\n", OHRT_VERSION, instagram, [UIDevice currentDevice].systemVersion];
     [report appendFormat:@"safe mode this start: %@\n", OhrtSafeLaunch() ? @"yes" : @"no"];
-    for (NSString *feature in @[ @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
+    for (NSString *feature in @[ @"start", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
         NSString *missing = OhrtMissing(feature);
         [report appendFormat:@"%@: %@\n", feature, missing ? [@"missing " stringByAppendingString:missing] : @"ok"];
     }

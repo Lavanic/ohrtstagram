@@ -88,17 +88,33 @@ static void OhrtWelcome(void) {
     }];
 }
 
-%hook IGInstagramAppDelegate
-- (_Bool)application:(UIApplication *)application willFinishLaunchingWithOptions:(id)options {
-    // This is the first moment that is certainly a real launch with the
-    // preferences readable. iOS loads the app ahead of time, sometimes on a
-    // phone that has not been unlocked since it was switched on, and what
-    // our constructors could read then is not to be trusted. So the guard is
-    // told, and the features that hook Instagram decide here whether to.
+// The app is launching: the first moment that is certainly a real start
+// with the preferences readable. iOS loads the app ahead of time, sometimes
+// on a phone that has not been unlocked since it was switched on, and what
+// our constructors could read then is not to be trusted. So the guard is
+// told, and the features that hook Instagram decide here whether to. Each
+// step only happens once however often this is called.
+static void OhrtAppLaunching(void) {
     OhrtGuardAppLaunching();
     OhrtInstallDMMode();
     OhrtInstallFollowing();
     OhrtInstallWall();
+}
+
+// Normally reached from the hook below, before Instagram has done anything.
+// If that hook ever fails to attach, this still gets the features in, late
+// but in, and the self-check in settings shows the hook as missing.
+__attribute__((constructor)) static void OhrtCoreLoad(void) {
+    [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil queue:[NSOperationQueue mainQueue]
+                                                  usingBlock:^(NSNotification *note) {
+        OhrtAppLaunching();
+        OhrtRegisterDefaults();
+    }];
+}
+
+%hook IGInstagramAppDelegate
+- (_Bool)application:(UIApplication *)application willFinishLaunchingWithOptions:(id)options {
+    OhrtAppLaunching();
 
     // Upstream registers its defaults in its own hook of this method, which
     // runs inside the call below. Ours are registered before it so our own
