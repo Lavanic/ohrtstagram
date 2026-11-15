@@ -187,7 +187,9 @@ static void OhrtSetExtraHeight(UICollectionView *list, CGFloat height) {
     CGFloat visibleBottom = list.contentOffset.y + list.bounds.size.height - list.adjustedContentInset.bottom;
     if (visibleBottom < CGRectGetMidY(frame)) return;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    if (self.newest > [defaults doubleForKey:kOhrtCaughtUpKey]) [defaults setDouble:self.newest forKey:kOhrtCaughtUpKey];
+    if (self.newest <= [defaults doubleForKey:kOhrtCaughtUpKey]) return;
+    [defaults setDouble:self.newest forKey:kOhrtCaughtUpKey];
+    OhrtLog(@"wall: reached, caught up to posts of %@", [NSDate dateWithTimeIntervalSince1970:self.newest]);
 }
 
 @end
