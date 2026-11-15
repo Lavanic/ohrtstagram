@@ -192,15 +192,29 @@ say "Injecting into Instagram $IG_VERSION"
 # Upstream also passes -d, which lists the app's Documents folder in Files
 # and over USB. Without an app group to use, the sideload fix keeps
 # Instagram's shared data in that folder, so it stays closed here.
-FLAGS=(-u -c 9 -n "$NAME" -b "$BUNDLE_ID" -k "$ICON")
+FLAGS=(-u -c 9 -n "$NAME" -b "$BUNDLE_ID")
 [ "$KEEP_EXTENSIONS" -eq 1 ] || FLAGS+=(-e)
 INJECT=("$TWEAK")
 [ -z "$FLEX_DYLIB" ] || INJECT+=("$FLEX_DYLIB")
+STAGE="$(mktemp -d)"
+# The icon at every size. cyan's own option writes a single 120 pixel
+# picture, which a 3x screen stretches.
+python3 "$ROOT/ohrt/tools/ipa.py" icons "$ICON" "$STAGE/icons"
+INJECT+=("$STAGE"/icons/*.png)
+FLAGS+=(-l "$STAGE/icons/icons.plist")
+if [ "$STOCK" -eq 0 ]; then
+    # Our page in the iPhone's Settings app, in place of Instagram's, which
+    # only shows a version. It can switch the tweak off when the app itself
+    # will not start.
+    python3 "$ROOT/ohrt/tools/ipa.py" settings "$STAGE/Settings.bundle" "$VERSION" "$IG_VERSION"
+    INJECT+=("$STAGE/Settings.bundle")
+fi
 # With the extensions gone the sideload fix only has the app to go into, so
 # cyan injects it. With them kept, ipapatch puts it into the app and into
 # each extension instead.
 [ "$KEEP_EXTENSIONS" -eq 1 ] || INJECT+=("$FIX")
 cyan -i "$IPA" -o "$OUT" -f "${INJECT[@]}" "${FLAGS[@]}"
+rm -rf "$STAGE"
 
 if [ "$KEEP_EXTENSIONS" -eq 1 ]; then
     command -v ipapatch >/dev/null || die "--keep-extensions needs ipapatch on PATH"
@@ -208,6 +222,7 @@ if [ "$KEEP_EXTENSIONS" -eq 1 ]; then
 fi
 
 EXPECT=(SCInsta.dylib zxPluginsInject.dylib)
+[ "$STOCK" -eq 1 ] || EXPECT=(--settings "${EXPECT[@]}")
 [ -z "$FLEX_DYLIB" ] || EXPECT+=(libFLEX.dylib)
 python3 "$ROOT/ohrt/tools/ipa.py" check "$OUT" "$NAME" "$BUNDLE_ID" "${EXPECT[@]}"
 say "Done: $ROOT/$OUT"
