@@ -177,7 +177,10 @@ OUT="packages/ohrtstagram_v${VERSION}_IG_v${IG_VERSION}.ipa"
 rm -f "$OUT"
 
 say "Injecting into Instagram $IG_VERSION"
-FLAGS=(-d -u -c 9 -n "$NAME" -b "$BUNDLE_ID" -k "$ICON")
+# Upstream also passes -d, which lists the app's Documents folder in Files
+# and over USB. Without an app group to use, the sideload fix keeps
+# Instagram's shared data in that folder, so it stays closed here.
+FLAGS=(-u -c 9 -n "$NAME" -b "$BUNDLE_ID" -k "$ICON")
 [ "$KEEP_EXTENSIONS" -eq 1 ] || FLAGS+=(-e)
 INJECT=("$TWEAK")
 [ -z "$FLEX_DYLIB" ] || INJECT+=("$FLEX_DYLIB")
