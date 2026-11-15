@@ -25,6 +25,7 @@
 #   --stock               upstream's sources only: nothing from ohrt/src, and
 #                         nothing left out
 #   --quick               reuse object files from the last build
+#   --unvetted            build on an IPA that ohrt/tools/vet.py refuses
 #   --tweak-only          stop after building the dylibs
 
 set -euo pipefail
@@ -45,6 +46,7 @@ WITH_FLEX=0
 STOCK=0
 QUICK=0
 TWEAK_ONLY=0
+UNVETTED=0
 
 say() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -59,8 +61,9 @@ while [ $# -gt 0 ]; do
         --flex) WITH_FLEX=1 ;;
         --stock) STOCK=1 ;;
         --quick) QUICK=1 ;;
+        --unvetted) UNVETTED=1 ;;
         --tweak-only) TWEAK_ONLY=1 ;;
-        -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "unknown option: $1" ;;
     esac
     shift
@@ -182,6 +185,12 @@ fi
 [ -f "$IPA" ] || die "no such IPA: $IPA"
 
 python3 "$ROOT/ohrt/tools/ipa.py" precheck "$IPA"
+if [ "$UNVETTED" -eq 0 ]; then
+    # A decrypted IPA comes from someone else's phone. Everything Apple's
+    # signature still covers has to be intact before anything is built on it.
+    say "Checking the IPA against Apple's signature"
+    python3 -I "$ROOT/ohrt/tools/vet.py" "$IPA" >/dev/null || die "$IPA does not pass ohrt/tools/vet.py; run it to see why (--unvetted builds anyway)"
+fi
 IG_VERSION="$(python3 "$ROOT/ohrt/tools/ipa.py" version "$IPA")"
 [ "$IG_VERSION" = "$PIN" ] || printf '\033[1;33mwarning:\033[0m this is Instagram %s; the hooks are written for %s\n' "$IG_VERSION" "$PIN" >&2
 KIND="ohrtstagram"
