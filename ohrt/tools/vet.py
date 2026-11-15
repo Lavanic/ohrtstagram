@@ -48,6 +48,8 @@ SLOT_ALTERNATE_FIRST = 0x1000
 SLOT_ALTERNATE_LAST = 0x1005
 SLOT_CMS = 0x10000
 
+APP_STORE_SIGNER = "Apple iPhone OS Application Signing"
+
 HASHES = {1: hashlib.sha1, 2: hashlib.sha256, 3: hashlib.sha256, 4: hashlib.sha384}
 SPECIAL = {1: "Info.plist", 2: "requirements", 3: "resources seal", 5: "entitlements", 7: "entitlements (DER)"}
 
@@ -61,11 +63,15 @@ def macho_slice(data):
     if len(data) < 32:
         raise Problem("too small to be a binary")
     if struct.unpack_from(">I", data)[0] == FAT_MAGIC:
-        for index in range(struct.unpack_from(">I", data, 4)[0]):
-            cpu, _, offset, size, _ = struct.unpack_from(">5I", data, 8 + index * 20)
-            if cpu == CPU_ARM64:
-                return offset, size
-        raise Problem("no arm64 slice")
+        count = struct.unpack_from(">I", data, 4)[0]
+        # Only the arm64 code would be checked here, and a phone may prefer
+        # another slice. The App Store ships one.
+        if count != 1:
+            raise Problem(f"holds code for {count} architectures, where an App Store binary has one")
+        cpu, subtype, offset, size, _ = struct.unpack_from(">5I", data, 8)
+        if cpu != CPU_ARM64 or subtype & 0xFFFFFF != 0:
+            raise Problem("no plain arm64 slice")
+        return offset, size
     if struct.unpack_from("<I", data)[0] != MH_MAGIC_64:
         raise Problem("not a 64-bit Mach-O")
     return 0, len(data)
@@ -110,6 +116,11 @@ class MachO:
                 start = struct.unpack_from("<I", self.data, at + 8)[0]
                 self.libraries.append(self.data[at + start:at + size].split(b"\0", 1)[0].decode(errors="replace"))
             at += size
+        # The header lists what the binary loads, and it is only checked
+        # because it lies outside the encrypted range. A range moved to cover
+        # it would excuse anything.
+        if self.crypt and self.crypt[0] < at:
+            raise Problem("the encrypted range covers the binary's own header")
 
     def stray_code(self):
         """Bytes sitting where the encrypted part of the code segment should be empty.
@@ -200,9 +211,10 @@ class CodeDirectory:
 
 
 def verify_cms(cms, signed_content):
-    """Checks Apple's signature over a code directory. Returns the signers' names."""
+    """Checks Apple's signature over a code directory. Returns the names of who signed."""
     with tempfile.TemporaryDirectory() as work:
         cms_path, content_path = os.path.join(work, "cms.der"), os.path.join(work, "content.bin")
+        signer_path = os.path.join(work, "signer.pem")
         with open(cms_path, "wb") as handle:
             handle.write(cms)
         with open(content_path, "wb") as handle:
@@ -211,29 +223,32 @@ def verify_cms(cms, signed_content):
         # not: a signing certificate expires, the app it signed does not.
         result = subprocess.run(
             ["openssl", "cms", "-verify", "-inform", "DER", "-in", cms_path, "-content", content_path, "-binary",
-             "-CAfile", APPLE_ROOT, "-purpose", "any", "-no_check_time", "-out", os.devnull],
+             "-CAfile", APPLE_ROOT, "-purpose", "any", "-no_check_time", "-signer", signer_path, "-out", os.devnull],
             capture_output=True, text=True)
         if result.returncode != 0:
             raise Problem("Apple's signature does not verify: " + (result.stderr.strip().splitlines() or ["unknown"])[-1])
-        names = subprocess.run(["openssl", "pkcs7", "-inform", "DER", "-in", cms_path, "-print_certs", "-noout"],
-                               capture_output=True, text=True).stdout
-    return re.findall(r"subject=.*?CN\s*=\s*([^,\n]+)", names)
+        # The certificate the signature was made with. A signature file can
+        # carry other certificates along, and any developer's own chains to
+        # Apple's root too, so the names of those prove nothing.
+        with open(signer_path) as handle:
+            certificates = re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", handle.read(), re.S)
+        names = []
+        for certificate in certificates:
+            subject = subprocess.run(["openssl", "x509", "-noout", "-subject", "-nameopt", "RFC2253"],
+                                     input=certificate, capture_output=True, text=True).stdout
+            match = re.search(r"CN=((?:[^,\\]|\\.)+)", subject)
+            names.append(match.group(1) if match else subject.strip())
+    return names
 
 
-def signed_cdhashes(cms):
-    """The code directory hashes listed inside the signed part of the signature."""
-    start = cms.find(b"<?xml")
-    end = cms.find(b"</plist>", start)
-    if start == -1 or end == -1:
-        return []
-    try:
-        return [bytes(value) for value in plistlib.loads(cms[start:end + 8]).get("cdhashes", [])]
-    except Exception:
-        return []
+def check_binary(name, data, bundle_files, required=()):
+    """Verifies one binary. Returns (report lines, problems, cdhashes, the binary, its team).
 
-
-def check_binary(name, data, bundle_files):
-    """Verifies one binary. Returns (report lines, problems, cdhashes)."""
+    `bundle_files` holds the files the signature seals by hash (the bundle's
+    Info.plist and its list of resources). `required` names the ones the
+    signature must seal: that is what ties a binary to this app, so that
+    another binary Apple signed for someone else cannot stand in for it.
+    """
     lines, problems = [], []
     macho = MachO(data)
     blobs = macho.blobs()
@@ -247,13 +262,12 @@ def check_binary(name, data, bundle_files):
     if SLOT_CMS not in blobs or len(blobs[SLOT_CMS]) <= 8:
         raise Problem("the signature is ad hoc (no certificate): this binary was re-signed by someone")
     cms = blobs[SLOT_CMS][8:]
+    # The signature is over the first code directory. The others are only
+    # other hashes of the same pages, and every one of them, first included,
+    # is held against the bytes below.
     signers = verify_cms(cms, directories[0].blob)
-    if not any("Apple iPhone OS Application Signing" in signer for signer in signers):
-        problems.append(f"signed, but not by the App Store ({', '.join(signers)})")
-    listed = signed_cdhashes(cms)
-    for directory in directories[1:]:
-        if directory.cdhash() not in listed:
-            problems.append("an alternate code directory is not covered by Apple's signature")
+    if not signers or any(signer != APP_STORE_SIGNER for signer in signers):
+        problems.append(f"signed, but not by the App Store ({', '.join(signers) or 'no signer'})")
 
     signed = macho.as_signed()
     crypt_start, crypt_end = (macho.crypt[0], macho.crypt[0] + macho.crypt[1]) if macho.crypt else (0, 0)
@@ -283,6 +297,8 @@ def check_binary(name, data, bundle_files):
         for number, label in SPECIAL.items():
             expected = directory.special_slot(number)
             if expected is None:
+                if number in required and directory is directories[0]:
+                    problems.append(f"the signature does not seal the {label}, so nothing ties this binary to the app")
                 continue
             if number == 1:
                 content = bundle_files.get("Info.plist")
@@ -303,7 +319,10 @@ def check_binary(name, data, bundle_files):
     elif macho.crypt[2] != 0:
         problems.append("still encrypted")
     lines.insert(0, f"signed by {signers[0] if signers else '?'}, team {best.team}, id {best.identifier}")
-    return lines, problems, [directory.cdhash() for directory in directories], macho
+    teams = {directory.team for directory in directories}
+    if len(teams) != 1:
+        problems.append("its code directories disagree about the team")
+    return lines, problems, [directory.cdhash() for directory in directories], macho, directories[0]
 
 
 def omitted(path, rules):
@@ -321,8 +340,12 @@ def omitted(path, rules):
     return isinstance(chosen, dict) and bool(chosen.get("omit"))
 
 
-def check_bundle(archive, root, label, report, failures, depth=0):
-    """Verifies one bundle (the app, a framework, an extension) and what is nested in it."""
+def check_bundle(archive, root, label, report, failures, depth=0, team=None):
+    """Verifies one bundle (the app, a framework, an extension) and what is nested in it.
+
+    `team` is the team the app itself is signed for; everything inside has
+    to be signed for the same one.
+    """
     names = [name for name in archive.namelist() if name.startswith(root) and not name.endswith("/")]
     files = {name[len(root):]: name for name in names}
     read = lambda rel: archive.read(files[rel]) if rel in files else None
@@ -341,12 +364,20 @@ def check_bundle(archive, root, label, report, failures, depth=0):
     seal_data = read("_CodeSignature/CodeResources")
     sealed_context = {"Info.plist": info_data, "_CodeSignature/CodeResources": seal_data}
     try:
-        lines, problems, cdhashes, macho = check_binary(label, binary, sealed_context)
+        lines, problems, cdhashes, macho, directory = check_binary(label, binary, sealed_context, required=(1, 3) if depth == 0 else (1,))
     except Problem as problem:
         failures.append(f"{label}: {problem}")
         return None
     report.append(("  " * depth) + f"{label}: " + "; ".join(lines))
     failures.extend(f"{label}: {problem}" for problem in problems)
+    if directory.identifier != info.get("CFBundleIdentifier"):
+        failures.append(f"{label}: signed as {directory.identifier}, but its Info.plist says {info.get('CFBundleIdentifier')}")
+    if depth == 0:
+        team = directory.team
+        if not team:
+            failures.append(f"{label}: the signature names no team")
+    elif directory.team != team:
+        failures.append(f"{label}: signed for team {directory.team}, not the app's team {team}")
 
     if seal_data is None:
         return cdhashes
@@ -406,12 +437,21 @@ def check_bundle(archive, root, label, report, failures, depth=0):
                   + (f", {len(changed)} CHANGED" if changed else "") + (f", {len(missing)} missing" if missing else "")
                   + (f", {len(extra)} NOT IN THE SEAL" if extra else ""))
     for path in decrypted:
+        # The seal's hash of this file was of its encrypted bytes, so it is
+        # checked by its own signature. What ties it to this app is that the
+        # signature seals the Info.plist next to it, which the app's seal
+        # has just vouched for, and names the app's team.
         folder = path.rsplit("/", 1)[0] + "/" if "/" in path else ""
         context = {"Info.plist": read(folder + "Info.plist"), "_CodeSignature/CodeResources": read(folder + "_CodeSignature/CodeResources")}
+        if context["Info.plist"] is None or (folder + "Info.plist") not in covered:
+            failures.append(f"{path}: a binary with no sealed Info.plist beside it to tie it to the app")
+            continue
         try:
-            lines, problems, _, _ = check_binary(path, read(path), context)
+            lines, problems, _, _, directory = check_binary(path, read(path), context, required=(1,))
             report.append(f"{indent}{path}: " + "; ".join(lines))
             failures.extend(f"{path}: {problem}" for problem in problems)
+            if directory.team != team:
+                failures.append(f"{path}: signed for team {directory.team}, not the app's team {team}")
         except Problem as problem:
             failures.append(f"{path}: {problem}")
     for path in changed[:8]:
@@ -424,7 +464,7 @@ def check_bundle(archive, root, label, report, failures, depth=0):
         report.append(f"{indent}missing, e.g. {', '.join(missing[:4])}")
 
     for path in nested:
-        inner = check_bundle(archive, root + path + "/", path, report, failures, depth + 1) if (path + "/Info.plist") in files else None
+        inner = check_bundle(archive, root + path + "/", path, report, failures, depth + 1, team) if (path + "/Info.plist") in files else None
         if inner is None and (path + "/Info.plist") not in files:
             # A bare dylib, sealed by its own code directory.
             content = read(path)
@@ -432,9 +472,11 @@ def check_bundle(archive, root, label, report, failures, depth=0):
                 failures.append(f"{label}: nested code {path} is missing")
                 continue
             try:
-                lines, problems, inner, _ = check_binary(path, content, {})
+                lines, problems, inner, _, directory = check_binary(path, content, {})
                 report.append(f"{indent}{path}: " + "; ".join(lines))
                 failures.extend(f"{path}: {problem}" for problem in problems)
+                if directory.team != team:
+                    failures.append(f"{path}: signed for team {directory.team}, not the app's team {team}")
             except Problem as problem:
                 failures.append(f"{path}: {problem}")
                 continue
@@ -460,15 +502,28 @@ def vet(path):
     report, failures = [], []
     with zipfile.ZipFile(path) as archive:
         entries = archive.infolist()
+        seen = set()
         for entry in entries:
-            if entry.filename.startswith("/") or ".." in entry.filename.split("/"):
+            if entry.filename.startswith("/") or ".." in entry.filename.split("/") or "\\" in entry.filename:
                 failures.append(f"archive entry escapes its folder: {entry.filename}")
+            # Two entries for one path: what is checked here and what gets
+            # unpacked later could be different files.
+            folded = entry.filename.rstrip("/").casefold()
+            if folded in seen:
+                failures.append(f"archive holds two entries for {entry.filename}")
+            seen.add(folded)
+            # A link can point anywhere, and the seal says nothing about
+            # where. The App Store's own packages have none.
+            if (entry.external_attr >> 16) & 0o170000 == 0o120000:
+                failures.append(f"archive entry is a symbolic link: {entry.filename}")
         roots = sorted({"/".join(e.filename.split("/")[:2]) + "/" for e in entries
                         if e.filename.startswith("Payload/") and e.filename.split("/")[1].endswith(".app")})
         if len(roots) != 1:
             raise Problem(f"expected one app in Payload/, found {len(roots)}")
         root = roots[0]
         info = plistlib.loads(archive.read(root + "Info.plist"))
+        if info.get("CFBundleIdentifier") != "com.burbn.instagram":
+            failures.append(f"this is {info.get('CFBundleIdentifier')}, not Instagram")
         report.append(f"{info.get('CFBundleIdentifier')} {info.get('CFBundleShortVersionString')} ({info.get('CFBundleVersion')}), "
                       f"minimum iOS {info.get('MinimumOSVersion')}, {len(entries)} entries")
         outside = sorted({e.filename.split("/")[0] for e in entries if not e.filename.startswith("Payload/")})
