@@ -1,0 +1,12 @@
+# Upstream files that ohrtstagram does not build. One path per line.
+
+# Replaced by ohrt/src/OhrtSettings.m.
+src/Settings/TweakSettings.m
+
+# These act on what someone else sent you: keeping messages they deleted,
+# replaying what they sent to be seen once.
+src/Features/StoriesAndMessages/KeepDeletedMessages.x
+src/Features/StoriesAndMessages/VisualMsgModifier.x
+
+# Swaps the app icon for one of Instagram's, over ours.
+src/Features/General/TeenAppIcons.x
