@@ -1,3 +1,6 @@
 [submodule "modules/FLEXing"]
 	path = modules/FLEXing
 	url = https://github.com/SoCuul/FLEXing
+[submodule "ohrt/modules/zxPluginsInject"]
+	path = ohrt/modules/zxPluginsInject
+	url = https://github.com/asdfzxcvbn/zxPluginsInject
