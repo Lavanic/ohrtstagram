@@ -99,7 +99,8 @@ static void OhrtWelcome(void) {
     OhrtRegisterDefaults();
     // Upstream opens its settings on a first run and signs off as SCInsta.
     // Telling it the first run is over keeps that from happening.
-    [[NSUserDefaults standardUserDefaults] setObject:SCIVersionString forKey:@"SCInstaFirstRun"];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if (![[defaults objectForKey:@"SCInstaFirstRun"] isEqual:SCIVersionString]) [defaults setObject:SCIVersionString forKey:@"SCInstaFirstRun"];
     return result;
 }
 - (_Bool)application:(UIApplication *)application didFinishLaunchingWithOptions:(id)options {
@@ -117,10 +118,16 @@ static void OhrtWelcome(void) {
 // queue is still cleared.
 + (void)cleanCache {
     NSFileManager *files = [NSFileManager defaultManager];
-    NSString *library = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES).firstObject;
-    NSString *analytics = [library stringByAppendingPathComponent:@"Application Support/com.burbn.instagram/analytics"];
-    for (NSString *name in [files contentsOfDirectoryAtPath:analytics error:nil]) {
-        [files removeItemAtPath:[analytics stringByAppendingPathComponent:name] error:nil];
+    NSString *support = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"Application Support"];
+    // Under Instagram's own name, and under whatever this copy is called.
+    NSMutableOrderedSet<NSString *> *owners = [NSMutableOrderedSet orderedSetWithObject:@"com.burbn.instagram"];
+    NSString *identifier = [NSBundle mainBundle].bundleIdentifier;
+    if (identifier) [owners addObject:identifier];
+    for (NSString *owner in owners) {
+        NSString *analytics = [[support stringByAppendingPathComponent:owner] stringByAppendingPathComponent:@"analytics"];
+        for (NSString *name in [files contentsOfDirectoryAtPath:analytics error:nil]) {
+            [files removeItemAtPath:[analytics stringByAppendingPathComponent:name] error:nil];
+        }
     }
 }
 
