@@ -39,15 +39,22 @@ static void OhrtGuardStep(void (^event)(void)) {
 
 BOOL OhrtSafeLaunch(void) {
     static dispatch_once_t once;
+    __block BOOL first = NO;
     dispatch_once(&once, ^{
-        gOhrtGuard.stored = -1;
-        OhrtGuardStep(^{
-            OhrtGuardStart(&gOhrtGuard, [[NSUserDefaults standardUserDefaults] integerForKey:kOhrtUnfinishedKey]);
-        });
-        gOhrtForced = [[NSUserDefaults standardUserDefaults] boolForKey:kOhrtForceSafeKey];
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        OhrtGuardStart(&gOhrtGuard, [defaults integerForKey:kOhrtUnfinishedKey]);
+        gOhrtForced = [defaults boolForKey:kOhrtForceSafeKey];
+        first = YES;
+    });
+    if (first) {
+        // Written out after the answer is settled, not while settling it: a
+        // write can run other code, and that code may ask this question.
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setInteger:gOhrtGuard.stored forKey:kOhrtUnfinishedKey];
+        [defaults synchronize];
         if (gOhrtGuard.safe) OhrtLog(@"guard: %ld starts in a row did not settle; this one runs with every switch off", gOhrtGuard.before);
         if (gOhrtForced) OhrtLog(@"guard: started with every switch off, as set in the Settings app");
-    });
+    }
     return gOhrtGuard.safe || gOhrtForced;
 }
 
