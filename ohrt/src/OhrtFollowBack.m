@@ -147,7 +147,10 @@ static BOOL OhrtIsConnectionError(id error) {
     NSUInteger generation = ++self.generation;
     self.awaiting = YES;
     self.interrupted = [UIApplication sharedApplication].applicationState != UIApplicationStateActive;
-    OhrtCallVoid(self.source, @"fetchData");
+    // If the fetcher is still waiting on the last request, asking again
+    // could make it skip a page, and a skipped page of followers is people
+    // wrongly named. Its answer is waited for instead.
+    if (!OhrtCallBool(self.source, @"loading")) OhrtCallVoid(self.source, @"fetchData");
     // If no answer comes at all, the check stops instead of hanging.
     __weak typeof(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kOhrtPageTimeout * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{

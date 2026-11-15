@@ -78,7 +78,8 @@ static void follow_back(void) {
     CHECK("an empty list is whole", OhrtAfterPage(0, 0, 0, &empty, 1, 600) == OhrtScanWhole && empty == 0);
     CHECK("new users and more to come: go on", OhrtAfterPage(1, 0, 50, &empty, 1, 600) == OhrtScanGoOn && empty == 0);
     CHECK("one page with nothing new is forgiven", OhrtAfterPage(1, 50, 50, &empty, 2, 600) == OhrtScanGoOn && empty == 1);
-    CHECK("a second one is not", OhrtAfterPage(1, 50, 50, &empty, 3, 600) == OhrtScanGiveUp);
+    CHECK("and a second", OhrtAfterPage(1, 50, 50, &empty, 3, 600) == OhrtScanGoOn && empty == 2);
+    CHECK("a third is not", OhrtAfterPage(1, 50, 50, &empty, 4, 600) == OhrtScanGiveUp);
     empty = 1;
     CHECK("new users forgive the earlier empty page", OhrtAfterPage(1, 50, 80, &empty, 3, 600) == OhrtScanGoOn && empty == 0);
     CHECK("too many pages", OhrtAfterPage(1, 50, 80, &empty, 600, 600) == OhrtScanGiveUp);

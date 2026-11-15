@@ -80,12 +80,13 @@ typedef enum {
 } OhrtScanStep;
 
 // What to do after a page of a list has arrived. `emptyPages` counts pages
-// in a row that brought nothing new and is updated here.
+// in a row that brought nothing new and is updated here. One or two of
+// those are forgiven: the fetcher can report the same page more than once.
 static inline OhrtScanStep OhrtAfterPage(int moreAvailable, size_t usersBefore, size_t usersAfter, unsigned *emptyPages,
                                          unsigned pages, unsigned maxPages) {
     if (!moreAvailable) return OhrtScanWhole;
     *emptyPages = usersAfter == usersBefore ? *emptyPages + 1 : 0;
-    if (*emptyPages >= 2 || pages >= maxPages) return OhrtScanGiveUp;
+    if (*emptyPages >= 3 || pages >= maxPages) return OhrtScanGiveUp;
     return OhrtScanGoOn;
 }
 
