@@ -1,0 +1,126 @@
+// Launch guard.
+//
+// A hook that crashes while the app starts would crash it on every start,
+// and the switch that turns the hook off is inside the app. So every start
+// is counted until the app has settled. After two in a row that did not,
+// the next one runs with every switch read as off, ours and upstream's,
+// which leaves plain Instagram with the settings page still reachable, and
+// says what happened. The stored settings are not touched.
+//
+// The counting is in OhrtLogic.h, where it is tested. This file feeds it
+// the app's events and keeps its one number between runs.
+#import "../../src/InstagramHeaders.h"
+#import "Ohrt.h"
+#import "OhrtLogic.h"
+
+static NSString *const kOhrtUnfinishedKey = @"ohrt_unfinished_launches";
+
+// Settled means this long at the front without dying.
+static const NSTimeInterval kOhrtSettleAfter = 15;
+
+static OhrtGuard gOhrtGuard;
+
+// Applies one event to the guard and writes its number out if it moved.
+static void OhrtGuardStep(void (^event)(void)) {
+    long before = gOhrtGuard.stored;
+    event();
+    if (gOhrtGuard.stored == before) return;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setInteger:gOhrtGuard.stored forKey:kOhrtUnfinishedKey];
+    // Out of this process before anything else gets the chance to end it.
+    [defaults synchronize];
+}
+
+BOOL OhrtSafeLaunch(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        gOhrtGuard.stored = -1;
+        OhrtGuardStep(^{
+            OhrtGuardStart(&gOhrtGuard, [[NSUserDefaults standardUserDefaults] integerForKey:kOhrtUnfinishedKey]);
+        });
+        if (gOhrtGuard.safe) OhrtLog(@"guard: %ld starts in a row did not settle; this one runs with every switch off", gOhrtGuard.before);
+    });
+    return gOhrtGuard.safe;
+}
+
+BOOL OhrtFeature(NSString *key) {
+    return !OhrtSafeLaunch() && OhrtBool(key);
+}
+
+void OhrtLaunchSettled(void) {
+    OhrtSafeLaunch();
+    OhrtGuardStep(^{
+        OhrtGuardSettle(&gOhrtGuard);
+    });
+}
+
+// Runs one piece of a feature that talks to Instagram's classes. If it
+// throws (a method that is not there after all, a value of another kind),
+// the feature is left off until the app restarts instead of taking the app
+// down or throwing again on every call.
+BOOL OhrtTry(NSString *feature, void (NS_NOESCAPE ^piece)(void)) {
+    static NSMutableSet<NSString *> *broken;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        broken = [NSMutableSet set];
+    });
+    @synchronized(broken) {
+        if ([broken containsObject:feature]) return NO;
+    }
+    @try {
+        piece();
+        return YES;
+    } @catch (NSException *exception) {
+        OhrtLog(@"%@ threw %@ (%@); it is off until the app restarts", feature, exception.name, exception.reason);
+        @synchronized(broken) {
+            [broken addObject:feature];
+        }
+        return NO;
+    }
+}
+
+static void OhrtSaySafe(void) {
+    UIViewController *top = topMostController();
+    if (!top) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"ohrtstagram is running with its changes off"
+                                                                   message:@"The last two starts ended before the app settled, so this one is plain Instagram. Your settings are kept. Turn off what you changed last (on your profile, hold the three lines at the top right), then restart."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [top presentViewController:alert animated:YES completion:nil];
+}
+
+__attribute__((constructor)) static void OhrtGuardLoad(void) {
+    OhrtSafeLaunch();
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+    NSOperationQueue *main = [NSOperationQueue mainQueue];
+
+    [center addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil queue:main usingBlock:^(NSNotification *note) {
+        BOOL inBackground = [UIApplication sharedApplication].applicationState == UIApplicationStateBackground;
+        OhrtGuardStep(^{
+            OhrtGuardFinishedLaunching(&gOhrtGuard, inBackground);
+        });
+    }];
+
+    [center addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:main usingBlock:^(NSNotification *note) {
+        __block int first = 0;
+        OhrtGuardStep(^{
+            first = OhrtGuardBecameActive(&gOhrtGuard);
+        });
+        if (!first) return;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kOhrtSettleAfter * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            OhrtLaunchSettled();
+        });
+        if (!gOhrtGuard.safe) return;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            OhrtSaySafe();
+        });
+    }];
+
+    for (NSNotificationName name in @[ UIApplicationWillResignActiveNotification, UIApplicationDidEnterBackgroundNotification, UIApplicationWillTerminateNotification ]) {
+        [center addObserverForName:name object:nil queue:main usingBlock:^(NSNotification *note) {
+            OhrtGuardStep(^{
+                OhrtGuardLeft(&gOhrtGuard);
+            });
+        }];
+    }
+}

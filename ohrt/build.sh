@@ -96,6 +96,16 @@ sources() {
 }
 FILES="$(sources | tr '\n' ' ')"
 
+# The parts of our code that are plain C are tested here, on this machine.
+if [ "$STOCK" -eq 0 ] && command -v cc >/dev/null; then
+    say "Running tests"
+    TESTS="$(mktemp -d)"
+    for test in ohrt/tests/*_test.c; do
+        cc -Wall -o "$TESTS/test" "$test" -lm && "$TESTS/test" || die "$test failed"
+    done
+    rm -rf "$TESTS"
+fi
+
 if [ "$QUICK" -eq 0 ]; then
     make clean >/dev/null 2>&1 || true
     rm -rf .theos
@@ -172,8 +182,10 @@ fi
 python3 "$ROOT/ohrt/tools/ipa.py" precheck "$IPA"
 IG_VERSION="$(python3 "$ROOT/ohrt/tools/ipa.py" version "$IPA")"
 [ "$IG_VERSION" = "$PIN" ] || printf '\033[1;33mwarning:\033[0m this is Instagram %s; the hooks are written for %s\n' "$IG_VERSION" "$PIN" >&2
-OUT="packages/ohrtstagram_v${VERSION}_IG_v${IG_VERSION}.ipa"
-[ "$STOCK" -eq 0 ] || OUT="packages/ohrtstagram-stock_v${VERSION}_IG_v${IG_VERSION}.ipa"
+KIND="ohrtstagram"
+[ "$STOCK" -eq 0 ] || KIND="ohrtstagram-stock"
+[ "$WITH_FLEX" -eq 0 ] || KIND="$KIND-flex"
+OUT="packages/${KIND}_v${VERSION}_IG_v${IG_VERSION}.ipa"
 rm -f "$OUT"
 
 say "Injecting into Instagram $IG_VERSION"

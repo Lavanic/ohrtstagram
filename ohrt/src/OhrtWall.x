@@ -306,7 +306,7 @@ static NSArray *OhrtCutAtWall(NSArray *objects, NSTimeInterval *newest, BOOL *cu
 
 %ctor {
     // Nothing is hooked unless the wall is on when the app starts.
-    if (!OhrtBool(kOhrtWallKey)) return;
+    if (!OhrtFeatureReady(kOhrtWallKey, @"wall")) return;
     gCutoff = OhrtSavedMark();
     %init(OhrtWall);
 

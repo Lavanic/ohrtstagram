@@ -124,9 +124,27 @@ static void OhrtWelcome(void) {
     }
 }
 
-// DM mode borrows upstream's own switch for hiding the feed tab.
+// In safe mode every switch reads as off (OhrtGuard.m). Otherwise DM mode
+// borrows upstream's own switch for hiding the feed tab, as long as this
+// Instagram has what DM mode needs to land on the inbox.
 + (BOOL)getBoolPref:(NSString *)key {
-    if ([key isEqualToString:@"hide_feed_tab"] && OhrtBool(kOhrtDMModeKey)) return YES;
+    if (OhrtSafeLaunch()) return NO;
+    if ([key isEqualToString:@"hide_feed_tab"] && OhrtBool(kOhrtDMModeKey)) {
+        static BOOL available;
+        static dispatch_once_t once;
+        dispatch_once(&once, ^{
+            available = OhrtAvailable(@"dm");
+        });
+        if (available) return YES;
+    }
+    return %orig;
+}
++ (double)getDoublePref:(NSString *)key {
+    if (OhrtSafeLaunch()) return 0;
+    return %orig;
+}
++ (NSString *)getStringPref:(NSString *)key {
+    if (OhrtSafeLaunch()) return @"";
     return %orig;
 }
 %end

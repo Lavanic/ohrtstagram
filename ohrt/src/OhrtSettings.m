@@ -51,6 +51,8 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
 }
 
 + (NSArray *)sections {
+    // Whoever got as far as opening this page has an app that started.
+    OhrtLaunchSettled();
     NSMutableArray *sections = [NSMutableArray array];
 
     [sections addObject:OhrtSection(nil, @[
@@ -175,6 +177,9 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         OhrtRestartSwitch(@"Settings from the home tab", @"Hold the home tab to open these settings", @"settings_shortcut"),
         OhrtSwitch(@"Disable safe mode", @"Instagram stops resetting itself after repeated crashes", @"disable_safe_mode"),
     ], nil)];
+    [debug addObject:OhrtSection(@"Self-check", @[
+        [SCISetting staticCellWithTitle:@"This Instagram" subtitle:OhrtSelfCheck() icon:nil],
+    ], @"What each ohrtstagram feature needs from Instagram, looked up in the app that is running.")];
     [sections addObject:OhrtSection(nil, @[ OhrtPage(@"Debug", @"ladybug", debug) ], nil)];
 
     [sections addObject:OhrtSection(@"About", @[

@@ -40,5 +40,5 @@ static char kOhrtLandedKey;
 
 %ctor {
     // Nothing is hooked unless the mode is on when the app starts.
-    if (OhrtBool(kOhrtDMModeKey)) %init(OhrtDMMode);
+    if (OhrtFeatureReady(kOhrtDMModeKey, @"dm")) %init(OhrtDMMode);
 }

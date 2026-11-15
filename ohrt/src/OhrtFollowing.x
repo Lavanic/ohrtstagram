@@ -40,5 +40,5 @@
 
 %ctor {
     // Nothing is hooked unless the feed is on when the app starts.
-    if (OhrtFollowingFeedEnabled()) %init(OhrtFollowing);
+    if (OhrtFollowingFeedEnabled() && !OhrtSafeLaunch() && OhrtAvailable(@"following")) %init(OhrtFollowing);
 }

@@ -13,6 +13,21 @@ FOUNDATION_EXPORT NSString *const kOhrtWallKey;
 
 FOUNDATION_EXPORT BOOL OhrtBool(NSString *key);
 
+#define OhrtLog(format, ...) NSLog(@"[ohrt] " format, ##__VA_ARGS__)
+
+// The launch guard (OhrtGuard.m). OhrtFeature is a switch that also reads
+// as off in safe mode.
+FOUNDATION_EXPORT BOOL OhrtSafeLaunch(void);
+FOUNDATION_EXPORT BOOL OhrtFeature(NSString *key);
+FOUNDATION_EXPORT void OhrtLaunchSettled(void);
+FOUNDATION_EXPORT BOOL OhrtTry(NSString *feature, void (NS_NOESCAPE ^piece)(void));
+
+// What a feature needs from the Instagram that is running (OhrtNeeds.m).
+FOUNDATION_EXPORT NSString *OhrtMissing(NSString *feature);
+FOUNDATION_EXPORT BOOL OhrtAvailable(NSString *feature);
+FOUNDATION_EXPORT BOOL OhrtFeatureReady(NSString *key, NSString *feature);
+FOUNDATION_EXPORT NSString *OhrtSelfCheck(void);
+
 // The otop palette.
 FOUNDATION_EXPORT UIColor *OhrtColor(uint32_t rgb);
 #define OHRT_BLACK 0x000000
