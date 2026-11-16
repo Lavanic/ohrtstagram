@@ -26,9 +26,9 @@
 NSString *const kOhrtLikesKey = @"ohrt_hidden_likes";
 NSString *const kOhrtLikesCountedNotification = @"OhrtLikesCounted";
 
-// The first key held full lists counted as exact; they are dropped.
-static NSString *const kOhrtCountedKey = @"ohrt_counted_likes_2";
-static NSString *const kOhrtCountedOldKey = @"ohrt_counted_likes";
+// Counts kept under the earlier keys came from the usual list alone, which
+// stops at about a hundred; they are dropped and read again.
+static NSString *const kOhrtCountedKey = @"ohrt_counted_likes_3";
 // The usual list names about a hundred, sometimes fewer: from this many on,
 // a list whose total is a stand-in is taken as full.
 static const long long kOhrtLikersFloor = 80;
@@ -75,7 +75,7 @@ static NSObject *OhrtCountedLock(void) {
     dispatch_once(&once, ^{
         lock = [NSObject new];
         gOhrtCounted = [NSMutableDictionary dictionary];
-        [[NSUserDefaults standardUserDefaults] removeObjectForKey:kOhrtCountedOldKey];
+        for (NSString *old in @[ @"ohrt_counted_likes", @"ohrt_counted_likes_2" ]) [[NSUserDefaults standardUserDefaults] removeObjectForKey:old];
         NSDictionary *kept = [[NSUserDefaults standardUserDefaults] dictionaryForKey:kOhrtCountedKey];
         for (NSString *mediaId in kept) {
             NSArray *entry = kept[mediaId];
