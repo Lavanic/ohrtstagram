@@ -80,6 +80,8 @@ static void OhrtRegisterDefaults(void) {
         // icon. The launch guard still turns them off with the rest.
         kOhrtWordmarkKey : @YES,
         kOhrtNameKey : @YES,
+        // Asked for, and it only adds a line to a screen.
+        kOhrtFactsKey : @YES,
     }];
 }
 
@@ -110,6 +112,7 @@ static void OhrtAppLaunching(void) {
     OhrtGuardAppLaunching();
     OhrtInstallBrand();
     OhrtInstallName();
+    OhrtInstallFacts();
     OhrtInstallDMMode();
     OhrtInstallFollowing();
     OhrtInstallWall();

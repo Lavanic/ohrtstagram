@@ -33,6 +33,18 @@ static void time_budget(void) {
     CHECK("a clock that went backwards counts nothing", OhrtCountedTime(-4, 5) == 0);
     CHECK("not a number counts nothing", OhrtCountedTime(NAN, 5) == 0);
 
+    char ago[24];
+    OhrtAgoText(20, ago, sizeof(ago));
+    CHECK("a moment ago is now", strcmp(ago, "now") == 0);
+    OhrtAgoText(45 * 60 + 30, ago, sizeof(ago));
+    CHECK("minutes", strcmp(ago, "45m ago") == 0);
+    OhrtAgoText(3 * 3600 + 59 * 60, ago, sizeof(ago));
+    CHECK("hours are not rounded up", strcmp(ago, "3h ago") == 0);
+    OhrtAgoText(2 * 86400 + 5, ago, sizeof(ago));
+    CHECK("days", strcmp(ago, "2d ago") == 0);
+    OhrtAgoText(NAN, ago, sizeof(ago));
+    CHECK("not a number is now", strcmp(ago, "now") == 0);
+
     CHECK("the name on its own", OhrtNameStandsAlone(' ', ' ', 'i'));
     CHECK("the name at the start and the end of a text", OhrtNameStandsAlone(' ', ' ', ' '));
     CHECK("the name before a full stop", OhrtNameStandsAlone(' ', '.', ' '));

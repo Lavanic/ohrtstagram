@@ -46,6 +46,9 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         OhrtSection(@"Mode", @[
             OhrtRestartSwitch(@"DM mode", @"Opens on your messages, with the home tab hidden", kOhrtDMModeKey),
         ], nil),
+        OhrtSection(@"Profiles", @[
+            OhrtRestartSwitch(@"Facts on a profile", @"A line under the bio: the account's id, its kind, whether it follows you, when you followed it", kOhrtFactsKey),
+        ], @"All of it is already in the app when a profile opens. The follow date is ohrtstagram's own note, so it knows the follows made here."),
         OhrtSection(@"Look", @[
             OhrtRestartSwitch(@"ohrtstagram marks", @"Our wordmark at the top of the home feed and our mark on the login screen", kOhrtWordmarkKey),
             OhrtRestartSwitch(@"ohrtstagram in text", @"Buttons, titles and menus say ohrtstagram", kOhrtNameKey),

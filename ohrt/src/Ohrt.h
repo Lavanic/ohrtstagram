@@ -24,6 +24,7 @@ FOUNDATION_EXPORT NSString *const kOhrtFollowingFeedKey;
 FOUNDATION_EXPORT NSString *const kOhrtWallKey;
 FOUNDATION_EXPORT NSString *const kOhrtWordmarkKey;
 FOUNDATION_EXPORT NSString *const kOhrtNameKey;
+FOUNDATION_EXPORT NSString *const kOhrtFactsKey;
 
 FOUNDATION_EXPORT BOOL OhrtBool(NSString *key);
 
@@ -51,6 +52,7 @@ FOUNDATION_EXPORT void OhrtInstallFollowing(void);
 FOUNDATION_EXPORT void OhrtInstallWall(void);
 FOUNDATION_EXPORT void OhrtInstallBrand(void);
 FOUNDATION_EXPORT void OhrtInstallName(void);
+FOUNDATION_EXPORT void OhrtInstallFacts(void);
 
 // What a feature needs from the Instagram that is running (OhrtNeeds.m).
 FOUNDATION_EXPORT NSString *OhrtMissing(NSString *feature);
@@ -79,6 +81,10 @@ FOUNDATION_EXPORT NSString *OhrtFormatDuration(NSTimeInterval seconds);
 
 // The screen that lists who does not follow back.
 FOUNDATION_EXPORT UIViewController *OhrtFollowBackScreen(void);
+
+// Instagram's session for the account that is signed in, or nil before the
+// tab bar exists.
+FOUNDATION_EXPORT id OhrtCurrentSession(void);
 
 // The following feed is on by its own switch, or because the wall needs it.
 FOUNDATION_EXPORT BOOL OhrtFollowingFeedEnabled(void);

@@ -52,7 +52,7 @@ static id OhrtFindController(UIViewController *root, Class cls) {
 }
 
 // The session of the account that is on screen.
-static id OhrtCurrentSession(void) {
+id OhrtCurrentSession(void) {
     Class tabBar = NSClassFromString(@"IGTabBarController");
     if (!tabBar) return nil;
     for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {

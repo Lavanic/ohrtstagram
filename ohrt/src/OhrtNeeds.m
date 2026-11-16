@@ -41,6 +41,14 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("wordmark", "IGHomeFeedHeaderView", "setTitle:animated:"),
     OHRT_NEED("wordmark", "IGHomeFeedHeaderView", "layoutSubviews"),
 
+    OHRT_NEED("facts", "IGProfileBioSectionController", "didUpdateToObject:"),
+    OHRT_NEED("facts", "IGProfileBioSectionController", "sizeForItemAtIndex:"),
+    OHRT_NEED("facts", "IGProfileBioSectionController", "cellForItemAtIndex:"),
+    OHRT_NEED("facts", "IGProfileBioCell", "layoutSubviews"),
+    OHRT_NEED("facts", "IGFollowController", "_didPressFollowButton"),
+    OHRT_NEED("facts", "IGUser", "followsCurrentUser"),
+    OHRT_NEED("facts", "IGUser", "followedByCurrentUser"),
+
     OHRT_NEED("dm", "IGTabBarController", "viewWillAppear:"),
     OHRT_NEED("dm", "IGTabBarController", "_tabBarHasDirectInbox"),
     OHRT_NEED("dm", "IGTabBarController", "_directInboxButtonPressed"),
@@ -116,7 +124,7 @@ NSString *OhrtSelfCheck(void) {
     NSString *instagram = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     [report appendFormat:@"ohrtstagram %@ (%@) on Insta\u2060gram %@, iOS %@\n", OHRT_VERSION, OHRT_BUILD, instagram, [UIDevice currentDevice].systemVersion];
     [report appendFormat:@"safe mode this start: %@\n", OhrtSafeLaunch() ? @"yes" : @"no"];
-    for (NSString *feature in @[ @"start", @"wordmark", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
+    for (NSString *feature in @[ @"start", @"wordmark", @"facts", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
         NSString *missing = OhrtMissing(feature);
         [report appendFormat:@"%@: %@\n", feature, missing ? [@"missing " stringByAppendingString:missing] : @"ok"];
     }

@@ -43,6 +43,16 @@ static inline double OhrtAllowedAfterMore(double spentSeconds, long step) {
     return (spentSeconds > 0 ? spentSeconds : 0) + (double)step * 60.0;
 }
 
+// Facts on a profile
+
+// "now", "45m ago", "3h ago", "2d ago".
+static inline void OhrtAgoText(double seconds, char *text, size_t size) {
+    if (!(seconds >= 60)) snprintf(text, size, "now");
+    else if (seconds < 3600) snprintf(text, size, "%ldm ago", (long)(seconds / 60));
+    else if (seconds < 86400) snprintf(text, size, "%ldh ago", (long)(seconds / 3600));
+    else snprintf(text, size, "%ldd ago", (long)(seconds / 86400));
+}
+
 // The app's name in its text
 //
 // Whether "Instagram", found in a piece of text, stands there as the app's
