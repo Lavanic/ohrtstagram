@@ -2,6 +2,7 @@
 // windows. It costs some smoothness while it is on: a filtered window is
 // drawn off screen first. Nothing here touches Instagram's classes.
 #import <QuartzCore/QuartzCore.h>
+#import <stdatomic.h>
 
 #import "Ohrt.h"
 
@@ -59,13 +60,24 @@ static void OhrtGrayscaleRefresh(void) {
     %init;
     // The settings switch only writes the preference; this is what makes it
     // take effect on the spot.
+    //
+    // The notice arrives on whichever thread wrote a preference, and that
+    // thread must never be made to wait for the main one. Asking for the
+    // notice on the main queue does exactly that, and Instagram's main
+    // thread waits on its own queues while it starts: each then waits for
+    // the other and iOS kills the app for not launching. So the notice only
+    // leaves word for the main thread and returns.
     static BOOL last;
+    static atomic_flag pending = ATOMIC_FLAG_INIT;
     last = OhrtBool(kOhrtGrayscaleKey);
-    [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:[NSOperationQueue mainQueue]
-                                                  usingBlock:^(NSNotification *note) {
-        BOOL now = OhrtFeature(kOhrtGrayscaleKey);
-        if (now == last) return;
-        last = now;
-        OhrtGrayscaleRefresh();
+    [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
+        if (atomic_flag_test_and_set(&pending)) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            atomic_flag_clear(&pending);
+            BOOL now = OhrtFeature(kOhrtGrayscaleKey);
+            if (now == last) return;
+            last = now;
+            OhrtGrayscaleRefresh();
+        });
     }];
 }
