@@ -738,6 +738,131 @@ static id OhrtFactsUser(UIView *header) {
 
 %end
 
+// Your own story's numbers, at the top of its list of viewers: how many of
+// those who saw it watched it again, how many shared it on, how many saw it
+// on Facebook, and which viewers do not follow you. Who rewatched is not
+// in the app's data, only how many. They come with the story; Instagram reads them for
+// its story overview, which not every account is shown.
+static NSString *OhrtStoryStatsText(id media) {
+    long long viewers = [OhrtCallValue(media, @"totalViewerCount") longLongValue];
+    id rewatched = OhrtCallValue(media, @"totalRewatcherCount");
+    id reshares = OhrtCallValue(media, @"reshareCount");
+    id facebook = OhrtCallValue(media, @"fbViewerCount");
+    static NSUInteger told;
+    if (told < 4) {
+        told++;
+        OhrtLog(@"story stats: a story of yours came with %@%@%@%@", viewers > 0 ? @"total_viewer_count " : @"", rewatched ? @"total_rewatcher_count " : @"",
+                reshares ? @"reshare_count " : @"", facebook ? @"fb_viewer_count" : @"");
+    }
+    NSMutableArray<NSString *> *facts = [NSMutableArray array];
+    if ([rewatched isKindOfClass:[NSNumber class]] && [rewatched longLongValue] > 0) {
+        long long again = [rewatched longLongValue];
+        [facts addObject:viewers > 0 ? [NSString stringWithFormat:@"%@ of %@ viewers rewatched", OhrtGrouped(again), OhrtGrouped(viewers)]
+                                     : [NSString stringWithFormat:@"%@ rewatched", OhrtGrouped(again)]];
+    }
+    if ([reshares isKindOfClass:[NSNumber class]] && [reshares longLongValue] > 0) {
+        [facts addObject:[NSString stringWithFormat:@"%@ %@", OhrtGrouped([reshares longLongValue]), [reshares longLongValue] == 1 ? @"reshare" : @"reshares"]];
+    }
+    if ([facebook isKindOfClass:[NSNumber class]] && [facebook longLongValue] > 0) {
+        [facts addObject:[NSString stringWithFormat:@"%@ from facebook", OhrtGrouped([facebook longLongValue])]];
+    }
+    return facts.count ? [facts componentsJoinedByString:@", "] : nil;
+}
+
+// The account a row of the viewer list is about, if it is one.
+static id OhrtViewerAccount(id object) {
+    Class userClass = NSClassFromString(@"IGUser");
+    if (!userClass) return nil;
+    if ([object isKindOfClass:userClass]) return object;
+    id user = OhrtCallValue(object, @"user");
+    return [user isKindOfClass:userClass] ? user : nil;
+}
+
+// Whether a viewer follows you: what Instagram says, or failing that what
+// your export said when it was made.
+static BOOL OhrtViewerFollows(id user) {
+    if (OhrtCallBool(user, @"followsCurrentUser")) return YES;
+    NSString *username = OhrtText(OhrtCallValue(user, @"username"));
+    return username && OhrtExportPerson(username)[@"follows_you"] != nil;
+}
+
+// Viewers who do not follow you go to the top of the list, in the order
+// Instagram had them, and are named in the line above it. Rows that are not
+// viewers keep their places.
+static NSArray *OhrtViewersStrangersFirst(NSArray *objects, NSString **named) {
+    NSMutableArray<NSNumber *> *slots = [NSMutableArray array];
+    NSMutableArray *strangers = [NSMutableArray array], *others = [NSMutableArray array];
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
+    NSUInteger saysFollows = 0, exportSays = 0;
+    for (NSUInteger index = 0; index < objects.count; index++) {
+        id user = OhrtViewerAccount(objects[index]);
+        if (!user) continue;
+        [slots addObject:@(index)];
+        if (OhrtCallBool(user, @"followsCurrentUser")) saysFollows++;
+        NSString *username = OhrtText(OhrtCallValue(user, @"username"));
+        if (username && OhrtExportPerson(username)[@"follows_you"]) exportSays++;
+        if (OhrtViewerFollows(user)) {
+            [others addObject:objects[index]];
+        } else {
+            [strangers addObject:objects[index]];
+            if (username) [names addObject:[@"@" stringByAppendingString:username]];
+        }
+    }
+    static NSUInteger told;
+    if (told < 3) {
+        told++;
+        NSMutableSet<NSString *> *kinds = [NSMutableSet set];
+        for (id object in objects) [kinds addObject:NSStringFromClass([object class])];
+        OhrtLog(@"story stats: a viewer list of %lu rows (%@), %lu viewers, %lu say they follow you, the export has %lu as followers", (unsigned long)objects.count,
+                [kinds.allObjects componentsJoinedByString:@" "], (unsigned long)slots.count, (unsigned long)saysFollows, (unsigned long)exportSays);
+    }
+    if (!strangers.count) return objects;
+    NSMutableArray *changed = [objects mutableCopy];
+    NSArray *ordered = [strangers arrayByAddingObjectsFromArray:others];
+    for (NSUInteger index = 0; index < slots.count; index++) changed[slots[index].unsignedIntegerValue] = ordered[index];
+    NSUInteger shown = MIN(names.count, (NSUInteger)10);
+    NSString *list = [[names subarrayWithRange:NSMakeRange(0, shown)] componentsJoinedByString:@", "];
+    if (names.count > shown) list = [list stringByAppendingFormat:@" and %lu more", (unsigned long)(names.count - shown)];
+    *named = [NSString stringWithFormat:@"%lu %@ follow you%@%@", (unsigned long)strangers.count, strangers.count == 1 ? @"doesn't" : @"don't", list.length ? @": " : @"", list];
+    return changed;
+}
+
+%group OhrtStoryStats
+
+%hook IGStoryViewersListViewController
+- (id)objectsForListAdapter:(id)adapter {
+    NSArray *objects = %orig;
+    if (![objects isKindOfClass:[NSArray class]]) return objects;
+    __block NSArray *with = objects;
+    OhrtTry(@"story stats", ^{
+        id item = OhrtIvar(self, "_item");
+        NSString *named = nil;
+        NSArray *ordered = OhrtViewersStrangersFirst(objects, &named);
+        NSString *stats = OhrtStoryStatsText(OhrtCall(item, @"media") ?: item);
+        NSString *text = stats && named ? [NSString stringWithFormat:@"%@, %@", stats, named] : stats ?: named;
+        if (!text.length) {
+            with = ordered;
+            return;
+        }
+        OhrtFactsModel *model = [OhrtFactsModel new];
+        model.text = text;
+        NSMutableArray *changed = [ordered mutableCopy];
+        [changed insertObject:model atIndex:0];
+        with = changed;
+    });
+    return with;
+}
+- (id)listAdapter:(id)adapter sectionControllerForObject:(id)object {
+    if ([object isKindOfClass:[OhrtFactsModel class]]) {
+        Class controller = OhrtFactsControllerClass();
+        if (controller) return [controller new];
+    }
+    return %orig;
+}
+%end
+
+%end
+
 void OhrtInstallFacts(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -748,5 +873,6 @@ void OhrtInstallFacts(void) {
         }
         %init(OhrtFacts);
         OhrtLog(@"facts: profiles get their lines");
+        if (OhrtAvailable(@"storystats")) %init(OhrtStoryStats);
     });
 }
