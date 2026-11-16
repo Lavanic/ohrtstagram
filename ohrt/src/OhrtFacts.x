@@ -1,20 +1,25 @@
-// Facts on a profile: a line between the picture and the bio, small and
-// red, of what the app holds about the account and does not show.
+// Facts on a profile: a few small lines above the Follow and Message
+// buttons, of what the app holds about the account and does not show.
 //
 //   id 1234567890, creator, follows you since 2019-03-05, followed since 2019-03-02,
-//   214 likes (last 2026-10-30), 12 comments, 340 messages since 2020-01-10, story 3h ago
+//   you liked 214 posts (last 2026-10-30), commented 12 times, watched 88 stories,
+//   340 messages between you since 2020-01-10, story 3h ago
 //
-// It has two sources, and nothing is asked of Instagram for either. The
+// There are two sources, and nothing is asked of Instagram for either. The
 // first is what the app already holds when a profile opens: the id, the
 // kind of account, whether it follows you, its latest story. The second is
 // your own history with the account, which Instagram's app does not hold:
-// when each follow happened, how much you have liked, commented, watched
-// and written. That comes from your Instagram export (OhrtExport.m), and
-// for follows made in this app from our own note of the day.
+// when each follow began, and how much you have liked, commented, watched
+// and written. Every count is of what you did, never of what they did. It
+// comes from your Instagram export (OhrtExport.m) up to the day that was
+// made, and from our own notes of what you have done in this app since
+// (OhrtActivity.x).
 //
-// The line is put at the top of the cell that holds the bio: the cell is
-// made taller by as much as the line needs at the cell's width, wrapped,
-// and the bio is moved down by that much and keeps the height it asked for.
+// A profile's header is a list of parts, each with a controller of its own
+// that says how tall it is and makes its cell. The facts are one more part,
+// put in just before the buttons, with a controller of ours. Instagram's
+// own parts are not touched.
+#import <objc/message.h>
 #import <objc/runtime.h>
 
 #import "Ohrt.h"
@@ -22,42 +27,40 @@
 
 NSString *const kOhrtFactsKey = @"ohrt_facts";
 
-// The red of the calico jack, faded: that colour was wanted, but less
-// harsh. Fading it lets what is behind it through, on a dark page or a
-// light one.
-static const uint32_t kOhrtFactsColour = 0xff0349;
-static const CGFloat kOhrtFactsFade = 0.6;
-// Between the line and the bio.
-static const CGFloat kOhrtFactsGap = 4;
-// A bio section with no bio in it is not inset from the screen's edges, so
-// the line keeps its own distance there.
+// The red of the calico jack, #ff0349, made light enough to read on a
+// dark page: that colour was wanted, less harsh, then lighter. On a light
+// page it is the red itself.
+static const uint32_t kOhrtFactsOnDark = 0xff8aa6;
+static const uint32_t kOhrtFactsOnLight = 0xff0349;
+static const CGFloat kOhrtFactsAbove = 2;
+static const CGFloat kOhrtFactsBelow = 8;
+// How far in from the screen's edges, when the bio's own distance cannot be
+// had.
 static const CGFloat kOhrtFactsSide = 16;
 static const NSTimeInterval kOhrtStoryLife = 24 * 60 * 60;
 
-static char kOhrtLineKey;
-static char kOhrtLabelKey;
+static char kOhrtModelKey;
 
-@interface IGProfileBioSectionController : NSObject
-@end
-
-@interface IGProfileBioCell : UICollectionViewCell
-@end
-
-@interface IGFollowController : NSObject
+@interface IGProfileHeaderView : UIView
 @end
 
 static UIFont *OhrtFactsFont(void) {
     return [UIFont systemFontOfSize:11];
 }
 
-// How tall the line is, gap included, wrapped to `width`.
-static CGFloat OhrtFactsHeight(NSString *line, CGFloat width) {
-    if (!line.length || !(width >= 40)) return 0;
-    CGRect box = [line boundingRectWithSize:CGSizeMake(width, CGFLOAT_MAX)
+static UIColor *OhrtFactsColour(void) {
+    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+        return OhrtColor(traits.userInterfaceStyle == UIUserInterfaceStyleDark ? kOhrtFactsOnDark : kOhrtFactsOnLight);
+    }];
+}
+
+static CGFloat OhrtFactsTextHeight(NSString *text, CGFloat width) {
+    if (!text.length || !(width >= 40)) return 0;
+    CGRect box = [text boundingRectWithSize:CGSizeMake(width, CGFLOAT_MAX)
                                     options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
                                  attributes:@{NSFontAttributeName : OhrtFactsFont()}
                                     context:nil];
-    return ceil(box.size.height) + kOhrtFactsGap;
+    return ceil(box.size.height);
 }
 
 static id OhrtIvar(id object, const char *name) {
@@ -89,57 +92,53 @@ static NSString *OhrtDay(NSDate *date) {
     return [formatter stringFromDate:date];
 }
 
-static NSString *OhrtMyAccount(void) {
-    return OhrtText(OhrtCall(OhrtCall(OhrtCurrentSession(), @"user"), @"pk"));
-}
-
-// When each account was followed from this app, by account id, for the
-// account that is signed in. Kept in a file of the app's own.
-static NSString *OhrtFollowDatesPath(NSString *account) {
-    NSString *support = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES).firstObject;
-    return [[support stringByAppendingPathComponent:@"ohrt"] stringByAppendingPathComponent:[NSString stringWithFormat:@"followed-%@.plist", account]];
-}
-
-static NSMutableDictionary<NSString *, NSNumber *> *OhrtFollowDates(NSString *account) {
-    static NSMutableDictionary<NSString *, NSMutableDictionary *> *loaded;
-    if (!account.length) return nil;
-    if (!loaded) loaded = [NSMutableDictionary dictionary];
-    NSMutableDictionary *dates = loaded[account];
-    if (!dates) {
-        dates = [NSMutableDictionary dictionaryWithContentsOfFile:OhrtFollowDatesPath(account)] ?: [NSMutableDictionary dictionary];
-        loaded[account] = dates;
-    }
-    return dates;
-}
-
-static void OhrtNoteFollow(NSString *account, NSString *pk, BOOL following) {
-    NSMutableDictionary<NSString *, NSNumber *> *dates = OhrtFollowDates(account);
-    if (!dates || !pk.length) return;
-    if (following == (dates[pk] != nil)) return;
-    dates[pk] = following ? @([NSDate date].timeIntervalSince1970) : nil;
-    NSString *path = OhrtFollowDatesPath(account);
-    [[NSFileManager defaultManager] createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
-    [dates writeToFile:path atomically:YES];
-    OhrtLog(@"facts: %@, %lu on record", following ? @"a follow noted" : @"a follow taken off the record", (unsigned long)dates.count);
-}
-
 static NSString *OhrtStamp(id seconds) {
     return OhrtDay([NSDate dateWithTimeIntervalSince1970:[seconds doubleValue]]);
 }
 
-// "214 likes (last 2026-10-30)" from a count with its first and last day.
-static void OhrtAddTally(NSMutableArray<NSString *> *facts, id tally, NSString *one, NSString *many, BOOL withLast) {
-    if (![tally isKindOfClass:[NSArray class]] || [tally count] < 3) return;
-    NSInteger count = [tally[0] integerValue];
+static NSString *OhrtMyAccount(void) {
+    return OhrtText(OhrtCall(OhrtCall(OhrtCurrentSession(), @"user"), @"pk"));
+}
+
+// How often you did one kind of thing to an account, and when last: what
+// the export says, and what has been noted here since the export was made.
+static NSInteger OhrtCountOf(NSString *kind, NSDictionary *past, NSString *pk, NSTimeInterval *last) {
+    NSInteger count = 0;
+    *last = 0;
+    id tally = past[kind];
+    if ([tally isKindOfClass:[NSArray class]] && [tally count] >= 3) {
+        count = [tally[0] integerValue];
+        *last = [tally[2] doubleValue];
+    }
+    NSArray<NSNumber *> *noted = OhrtActivityTimes(pk, kind);
+    if (noted.count) {
+        size_t length = noted.count;
+        double *times = malloc(length * sizeof(double));
+        if (times) {
+            for (size_t index = 0; index < length; index++) times[index] = noted[index].doubleValue;
+            double latest = 0;
+            count += (NSInteger)OhrtCountAfter(times, length, OhrtExportDate(), &latest);
+            if (latest > *last) *last = latest;
+            free(times);
+        }
+    }
+    return count;
+}
+
+// "liked 214 posts (last 2026-10-30)". The first of these on a line is
+// given its "you" by the caller.
+static void OhrtAddDone(NSMutableArray<NSString *> *done, NSString *kind, NSDictionary *past, NSString *pk, NSString *verb, NSString *one, NSString *many, BOOL withLast) {
+    NSTimeInterval last = 0;
+    NSInteger count = OhrtCountOf(kind, past, pk, &last);
     if (count < 1) return;
-    NSString *text = [NSString stringWithFormat:@"%ld %@", (long)count, count == 1 ? one : many];
-    if (withLast && [tally[2] doubleValue] > 0) text = [text stringByAppendingFormat:@" (last %@)", OhrtStamp(tally[2])];
-    [facts addObject:text];
+    NSString *text = [NSString stringWithFormat:@"%@ %ld %@", verb, (long)count, count == 1 ? one : many];
+    if (withLast && last > 0) text = [text stringByAppendingFormat:@" (last %@)", OhrtStamp(@(last))];
+    [done addObject:text];
 }
 
 // Your history with an account that is not your own: what the app says
 // stands now, with the days and counts the export and our own notes give.
-static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString *account, NSString *pk) {
+static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString *pk) {
     NSDictionary *past = OhrtExportPerson(OhrtText(OhrtCall(user, @"username")));
     BOOL followsYou = OhrtCallBool(user, @"followsCurrentUser");
     BOOL followed = OhrtCallBool(user, @"followedByCurrentUser");
@@ -147,10 +146,8 @@ static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString 
     if (followsYou) [facts addObject:past[@"follows_you"] ? [@"follows you since " stringByAppendingString:OhrtStamp(past[@"follows_you"])] : @"follows you"];
     else if (past[@"follows_you"]) [facts addObject:[NSString stringWithFormat:@"followed you from %@ but not now", OhrtStamp(past[@"follows_you"])]];
 
-    // The earlier of the export's day and the one noted here.
-    NSNumber *noted = OhrtFollowDates(account)[pk];
-    NSNumber *exported = past[@"followed"];
-    NSNumber *since = noted && exported ? (noted.doubleValue < exported.doubleValue ? noted : exported) : (noted ?: exported);
+    // A follow noted here is the newer one: it happened after the export.
+    NSNumber *since = OhrtActivityFollowed(pk) ?: past[@"followed"];
     if (followed) {
         if (since) [facts addObject:[@"followed since " stringByAppendingString:OhrtStamp(since)]];
     } else if (past[@"unfollowed"]) {
@@ -164,18 +161,25 @@ static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString 
     if (past[@"restricted"]) [facts addObject:@"restricted"];
     if (past[@"story_hidden"]) [facts addObject:@"your story is hidden from them"];
 
-    OhrtAddTally(facts, past[@"likes"], @"like", @"likes", YES);
-    OhrtAddTally(facts, past[@"comments"], @"comment", @"comments", NO);
-    OhrtAddTally(facts, past[@"story_likes"], @"story like", @"story likes", NO);
-    OhrtAddTally(facts, past[@"stories_seen"], @"story seen", @"stories seen", NO);
-    OhrtAddTally(facts, past[@"saved"], @"saved", @"saved", NO);
+    NSMutableArray<NSString *> *done = [NSMutableArray array];
+    OhrtAddDone(done, @"likes", past, pk, @"liked", @"post", @"posts", YES);
+    OhrtAddDone(done, @"comments", past, pk, @"commented", @"time", @"times", NO);
+    OhrtAddDone(done, @"story_likes", past, pk, @"liked", @"story", @"stories", NO);
+    OhrtAddDone(done, @"stories_seen", past, pk, @"watched", @"story", @"stories", NO);
+    OhrtAddDone(done, @"saved", past, pk, @"saved", @"post", @"posts", NO);
+    if (done.count) {
+        done[0] = [@"you " stringByAppendingString:done[0]];
+        [facts addObjectsFromArray:done];
+    }
 
     NSDictionary *thread = OhrtExportThread(OhrtText(OhrtCall(user, @"fullName")));
     NSInteger messages = [thread[@"messages"] integerValue];
-    if (messages > 0) [facts addObject:[NSString stringWithFormat:@"%ld %@ since %@", (long)messages, messages == 1 ? @"message" : @"messages", OhrtStamp(thread[@"first"])]];
+    if (messages > 0) {
+        [facts addObject:[NSString stringWithFormat:@"%ld %@ between you since %@", (long)messages, messages == 1 ? @"message" : @"messages", OhrtStamp(thread[@"first"])]];
+    }
 }
 
-static NSString *OhrtFactsLine(id user) {
+static NSString *OhrtFactsText(id user) {
     NSString *pk = OhrtText(OhrtCall(user, @"pk"));
     if (!pk.length) return nil;
     NSMutableArray<NSString *> *facts = [NSMutableArray arrayWithObject:[@"id " stringByAppendingString:pk]];
@@ -191,11 +195,13 @@ static NSString *OhrtFactsLine(id user) {
         [facts addObject:type];
     }
 
+    // Instagram sends the day an account was made with some profiles and
+    // not with others. It is shown when it came.
     NSDate *joined = OhrtDate(OhrtCall(user, @"dateJoined"));
     if (joined) [facts addObject:[@"joined " stringByAppendingString:OhrtDay(joined)]];
 
     NSString *account = OhrtMyAccount();
-    if (account.length && ![account isEqualToString:pk]) OhrtAddHistory(facts, user, account, pk);
+    if (account.length && ![account isEqualToString:pk]) OhrtAddHistory(facts, user, pk);
 
     NSDate *story = OhrtDate(OhrtCall(user, @"latestReelMediaDate"));
     NSTimeInterval age = story ? -story.timeIntervalSinceNow : -1;
@@ -207,119 +213,207 @@ static NSString *OhrtFactsLine(id user) {
     return [facts componentsJoinedByString:@", "];
 }
 
-// Whose profile a bio section belongs to.
-static id OhrtFactsUser(id controller) {
+// The part of the header that is ours, as the header's list holds it. The
+// list tells its parts apart by these two methods.
+@interface OhrtFactsModel : NSObject
+@property (nonatomic, copy) NSString *text;
+@end
+
+@implementation OhrtFactsModel
+
+- (id)diffIdentifier {
+    return @"ohrt.facts";
+}
+
+- (BOOL)isEqualToDiffableObject:(id)object {
+    return [object isKindOfClass:[OhrtFactsModel class]] && [self.text isEqualToString:((OhrtFactsModel *)object).text];
+}
+
+@end
+
+@interface OhrtFactsCell : UICollectionViewCell
+@property (nonatomic, strong) UILabel *label;
+@property (nonatomic) CGFloat side;
+@end
+
+@implementation OhrtFactsCell
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if ((self = [super initWithFrame:frame])) {
+        _side = kOhrtFactsSide;
+        _label = [UILabel new];
+        _label.font = OhrtFactsFont();
+        _label.textColor = OhrtFactsColour();
+        _label.numberOfLines = 0;
+        _label.lineBreakMode = NSLineBreakByWordWrapping;
+        [self.contentView addSubview:_label];
+    }
+    return self;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGRect bounds = self.contentView.bounds;
+    self.label.frame = CGRectMake(self.side, kOhrtFactsAbove, MAX(0, bounds.size.width - 2 * self.side), MAX(0, bounds.size.height - kOhrtFactsAbove - kOhrtFactsBelow));
+}
+
+@end
+
+// The controller for our part. Instagram's list controllers are a class in
+// its own framework, so ours is made from that class as the app runs, and
+// given the four things a controller is asked: how many cells, how big,
+// which cell, and what it now shows.
+
+// The distance the bio keeps from the screen's edges, which ours matches.
+static CGFloat OhrtFactsSideIn(id list) {
+    SEL objects = NSSelectorFromString(@"objects"), controllerFor = NSSelectorFromString(@"sectionControllerForObject:"), inset = NSSelectorFromString(@"inset");
+    Class bio = NSClassFromString(@"IGProfileBioSectionControllerModel");
+    if (!bio || ![list respondsToSelector:objects] || ![list respondsToSelector:controllerFor]) return kOhrtFactsSide;
+    for (id object in ((NSArray * (*)(id, SEL))objc_msgSend)(list, objects)) {
+        if (![object isKindOfClass:bio]) continue;
+        id controller = ((id (*)(id, SEL, id))objc_msgSend)(list, controllerFor, object);
+        if (![controller respondsToSelector:inset]) break;
+        UIEdgeInsets insets = ((UIEdgeInsets (*)(id, SEL))objc_msgSend)(controller, inset);
+        return insets.left >= 4 && insets.left <= 40 ? insets.left : kOhrtFactsSide;
+    }
+    return kOhrtFactsSide;
+}
+
+static CGFloat OhrtFactsWidth(id list) {
+    SEL size = NSSelectorFromString(@"containerSize");
+    CGFloat width = [list respondsToSelector:size] ? ((CGSize (*)(id, SEL))objc_msgSend)(list, size).width : 0;
+    return width >= 100 ? width : [UIScreen mainScreen].bounds.size.width;
+}
+
+static NSInteger OhrtFactsNumberOfItems(id self, SEL _cmd) {
+    return 1;
+}
+
+static CGSize OhrtFactsSizeForItem(id self, SEL _cmd, NSInteger index) {
+    OhrtFactsModel *model = objc_getAssociatedObject(self, &kOhrtModelKey);
+    id list = OhrtCall(self, @"collectionContext");
+    CGFloat width = OhrtFactsWidth(list);
+    CGFloat height = OhrtFactsTextHeight(model.text, width - 2 * OhrtFactsSideIn(list));
+    return CGSizeMake(width, height > 0 ? kOhrtFactsAbove + height + kOhrtFactsBelow : 0.01);
+}
+
+static id OhrtFactsCellForItem(id self, SEL _cmd, NSInteger index) {
+    OhrtFactsModel *model = objc_getAssociatedObject(self, &kOhrtModelKey);
+    id list = OhrtCall(self, @"collectionContext");
+    SEL dequeue = NSSelectorFromString(@"dequeueReusableCellOfClass:forSectionController:atIndex:");
+    OhrtFactsCell *cell = ((id (*)(id, SEL, Class, id, NSInteger))objc_msgSend)(list, dequeue, [OhrtFactsCell class], self, index);
+    if ([cell isKindOfClass:[OhrtFactsCell class]]) {
+        cell.side = OhrtFactsSideIn(list);
+        cell.label.text = model.text;
+        [cell setNeedsLayout];
+    }
+    return cell;
+}
+
+static void OhrtFactsDidUpdate(id self, SEL _cmd, id object) {
+    objc_setAssociatedObject(self, &kOhrtModelKey, [object isKindOfClass:[OhrtFactsModel class]] ? object : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+// The header may ask its controllers things only Instagram's own know how
+// to answer. Ours takes any such message and does nothing.
+static NSMethodSignature *OhrtFactsSignature(id self, SEL _cmd, SEL selector) {
+    struct objc_super parent = {self, class_getSuperclass(object_getClass(self))};
+    NSMethodSignature *known = ((NSMethodSignature * (*)(struct objc_super *, SEL, SEL))objc_msgSendSuper)(&parent, _cmd, selector);
+    return known ?: [NSMethodSignature signatureWithObjCTypes:"v@:"];
+}
+
+static void OhrtFactsForward(id self, SEL _cmd, NSInvocation *invocation) {
+}
+
+static Class OhrtFactsControllerClass(void) {
+    static Class made;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        Class parent = NSClassFromString(@"IGListSectionController");
+        SEL dequeue = NSSelectorFromString(@"dequeueReusableCellOfClass:forSectionController:atIndex:");
+        if (!parent || ![NSClassFromString(@"IGListAdapter") instancesRespondToSelector:dequeue]) return;
+        Class controller = objc_allocateClassPair(parent, "OhrtFactsSectionController", 0);
+        if (!controller) return;
+        class_addMethod(controller, NSSelectorFromString(@"numberOfItems"), (IMP)OhrtFactsNumberOfItems, "q@:");
+        class_addMethod(controller, NSSelectorFromString(@"sizeForItemAtIndex:"), (IMP)OhrtFactsSizeForItem, "{CGSize=dd}@:q");
+        class_addMethod(controller, NSSelectorFromString(@"cellForItemAtIndex:"), (IMP)OhrtFactsCellForItem, "@@:q");
+        class_addMethod(controller, NSSelectorFromString(@"didUpdateToObject:"), (IMP)OhrtFactsDidUpdate, "v@:@");
+        class_addMethod(controller, @selector(methodSignatureForSelector:), (IMP)OhrtFactsSignature, "@@::");
+        class_addMethod(controller, @selector(forwardInvocation:), (IMP)OhrtFactsForward, "v@:@");
+        objc_registerClassPair(controller);
+        made = controller;
+    });
+    return made;
+}
+
+// Whose profile a header is showing.
+static id OhrtFactsUser(UIView *header) {
     Class userClass = NSClassFromString(@"IGUser");
-    id fragment = OhrtCall(OhrtIvar(controller, "_model"), @"userFragment");
-    id viaScreen = OhrtCall(OhrtCall(controller, @"viewController"), @"user");
+    if (!userClass) return nil;
+    id found = nil;
+    NSString *via = @"nothing";
+    id source = OhrtCall(OhrtIvar(header, "_dataSource"), @"user");
+    if ([source isKindOfClass:userClass]) {
+        found = source;
+        via = @"its data source";
+    }
+    for (UIResponder *responder = header.nextResponder; responder && !found; responder = responder.nextResponder) {
+        if (![responder isKindOfClass:[UIViewController class]]) continue;
+        id user = OhrtCall(responder, @"user");
+        if ([user isKindOfClass:userClass]) {
+            found = user;
+            via = NSStringFromClass([responder class]);
+        }
+    }
     static BOOL described;
-    if (!described) {
+    if (!described && (found || header.window)) {
         described = YES;
-        OhrtLog(@"facts: the bio's account is a %@, the screen's a %@", fragment ? NSStringFromClass([fragment class]) : @"nothing",
-                viaScreen ? NSStringFromClass([viaScreen class]) : @"nothing");
+        OhrtLog(@"facts: the header's account comes from %@", via);
     }
-    if (userClass && [fragment isKindOfClass:userClass]) return fragment;
-    if (userClass && [viaScreen isKindOfClass:userClass]) return viaScreen;
-    return fragment ?: viaScreen;
-}
-
-static void OhrtFactsShow(id controller, UICollectionViewCell *cell) {
-    if (![cell isKindOfClass:[UICollectionViewCell class]]) return;
-    NSString *line = objc_getAssociatedObject(controller, &kOhrtLineKey);
-    UILabel *label = objc_getAssociatedObject(cell, &kOhrtLabelKey);
-    if (!label && line) {
-        label = [UILabel new];
-        label.font = OhrtFactsFont();
-        label.textColor = [OhrtColor(kOhrtFactsColour) colorWithAlphaComponent:kOhrtFactsFade];
-        label.numberOfLines = 0;
-        label.lineBreakMode = NSLineBreakByWordWrapping;
-        [cell.contentView addSubview:label];
-        objc_setAssociatedObject(cell, &kOhrtLabelKey, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    label.text = line;
-    label.hidden = line == nil;
-    [cell setNeedsLayout];
-}
-
-// Works out the line for a bio section's account and puts it on the
-// section's cell if it has one.
-static void OhrtFactsRefresh(id controller) {
-    NSString *line = OhrtFactsLine(OhrtFactsUser(controller));
-    objc_setAssociatedObject(controller, &kOhrtLineKey, line, OBJC_ASSOCIATION_COPY_NONATOMIC);
-    static BOOL said;
-    if (!said && line) {
-        said = YES;
-        OhrtLog(@"facts: a line of %lu facts is shown", (unsigned long)[line componentsSeparatedByString:@", "].count);
-    }
-    id cell = OhrtIvar(controller, "_bioCell");
-    if (cell) OhrtFactsShow(controller, cell);
+    return found;
 }
 
 %group OhrtFacts
 
-%hook IGProfileBioSectionController
-- (void)didUpdateToObject:(id)object {
-    %orig;
+%hook IGProfileHeaderView
+- (id)objectsForListAdapter:(id)adapter {
+    NSArray *objects = %orig;
+    if (![objects isKindOfClass:[NSArray class]] || !OhrtFactsControllerClass()) return objects;
+    __block NSArray *with = objects;
     OhrtTry(@"facts", ^{
-        OhrtFactsRefresh(self);
+        NSString *text = OhrtFactsText(OhrtFactsUser(self));
+        if (!text.length) return;
+        OhrtFactsModel *model = [OhrtFactsModel new];
+        model.text = text;
+        // Just before the buttons, which is under "Followed by" when the
+        // profile has that. A header with no buttons gets it at the end.
+        Class buttons = NSClassFromString(@"IGProfileActionBarViewModel");
+        NSUInteger at = objects.count;
+        for (NSUInteger index = 0; index < objects.count; index++) {
+            if (buttons && [objects[index] isKindOfClass:buttons]) {
+                at = index;
+                break;
+            }
+        }
+        NSMutableArray *changed = [objects mutableCopy];
+        [changed insertObject:model atIndex:at];
+        with = changed;
+        static BOOL said;
+        if (!said) {
+            said = YES;
+            OhrtLog(@"facts: %lu facts go in at place %lu of %lu in the header", (unsigned long)[text componentsSeparatedByString:@", "].count, (unsigned long)at,
+                    (unsigned long)objects.count);
+        }
+        OhrtActivityListen();
     });
+    return with;
 }
-- (CGSize)sizeForItemAtIndex:(NSInteger)index {
-    CGSize size = %orig;
-    NSString *line = objc_getAssociatedObject(self, &kOhrtLineKey);
-    // Only while the line is really being drawn: a cell made taller for a
-    // line that never comes would leave a gap.
-    if (!line || !OhrtTry(@"facts", ^{})) return size;
-    // With no bio the section is not inset, and the line insets itself.
-    CGFloat width = size.height < 1 ? size.width - 2 * kOhrtFactsSide : size.width;
-    size.height += OhrtFactsHeight(line, width);
-    return size;
-}
-- (id)cellForItemAtIndex:(NSInteger)index {
-    id cell = %orig;
-    OhrtTry(@"facts", ^{
-        OhrtFactsShow(self, cell);
-    });
-    return cell;
-}
-%end
-
-%hook IGProfileBioCell
-- (void)layoutSubviews {
-    %orig;
-    UILabel *label = objc_getAssociatedObject(self, &kOhrtLabelKey);
-    if (!label || label.hidden) return;
-    CGRect bounds = self.contentView.bounds;
-    CGFloat side = self.frame.origin.x < 8 ? kOhrtFactsSide : 0;
-    CGFloat width = MAX(0, bounds.size.width - 2 * side);
-    CGFloat height = MIN(OhrtFactsHeight(label.text, width), bounds.size.height);
-    UIView *bio = OhrtIvar(self, "_bioView");
-    if ([bio isKindOfClass:[UIView class]]) {
-        // Instagram has just given the bio the whole cell. It gets the
-        // part under the line, which is the height it asked for.
-        CGRect frame = bounds;
-        frame.origin.y = height;
-        frame.size.height = bounds.size.height - height;
-        bio.frame = frame;
+- (id)listAdapter:(id)adapter sectionControllerForObject:(id)object {
+    if ([object isKindOfClass:[OhrtFactsModel class]]) {
+        Class controller = OhrtFactsControllerClass();
+        if (controller) return [controller new];
     }
-    label.frame = CGRectMake(side, 0, width, MAX(0, height - kOhrtFactsGap));
-}
-%end
-
-%hook IGFollowController
-- (void)_didPressFollowButton {
-    id user = OhrtCall(self, @"user");
-    BOOL before = OhrtCallBool(user, @"followedByCurrentUser");
-    %orig;
-    if (!user) return;
-    // The button answers at once and Instagram a moment later. What stands
-    // after that moment is what happened.
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        OhrtTry(@"facts", ^{
-            BOOL after = OhrtCallBool(user, @"followedByCurrentUser");
-            if (after != before) OhrtNoteFollow(OhrtMyAccount(), OhrtText(OhrtCall(user, @"pk")), after);
-        });
-    });
+    return %orig;
 }
 %end
 
@@ -329,7 +423,11 @@ void OhrtInstallFacts(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         if (!OhrtFeatureReady(kOhrtFactsKey, @"facts")) return;
+        if (!OhrtFactsControllerClass()) {
+            OhrtLog(@"facts: left off, this Instagram's lists are not the kind ours is made from");
+            return;
+        }
         %init(OhrtFacts);
-        OhrtLog(@"facts: profiles get their line");
+        OhrtLog(@"facts: profiles get their lines");
     });
 }

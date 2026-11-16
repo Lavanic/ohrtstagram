@@ -41,11 +41,11 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("wordmark", "IGHomeFeedHeaderView", "setTitle:animated:"),
     OHRT_NEED("wordmark", "IGHomeFeedHeaderView", "layoutSubviews"),
 
-    OHRT_NEED("facts", "IGProfileBioSectionController", "didUpdateToObject:"),
-    OHRT_NEED("facts", "IGProfileBioSectionController", "sizeForItemAtIndex:"),
-    OHRT_NEED("facts", "IGProfileBioSectionController", "cellForItemAtIndex:"),
-    OHRT_NEED("facts", "IGProfileBioCell", "layoutSubviews"),
-    OHRT_NEED("facts", "IGFollowController", "_didPressFollowButton"),
+    OHRT_NEED("facts", "IGProfileHeaderView", "objectsForListAdapter:"),
+    OHRT_NEED("facts", "IGProfileHeaderView", "listAdapter:sectionControllerForObject:"),
+    OHRT_NEED("facts", "IGListSectionController", "sizeForItemAtIndex:"),
+    OHRT_NEED("facts", "IGListSectionController", "collectionContext"),
+    OHRT_NEED("facts", "IGListAdapter", "dequeueReusableCellOfClass:forSectionController:atIndex:"),
     OHRT_NEED("facts", "IGUser", "followsCurrentUser"),
     OHRT_NEED("facts", "IGUser", "followedByCurrentUser"),
 
