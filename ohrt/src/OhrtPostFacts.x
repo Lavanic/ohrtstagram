@@ -126,6 +126,44 @@ static void OhrtPostSayFields(NSArray<NSString *> *fields) {
     OhrtLog(@"post facts: a post came with %@", fields.count ? [fields componentsJoinedByString:@" "] : @"none of the fields");
 }
 
+// A value Instagram's servers name things by ("media_or_ad"), as words.
+static NSString *OhrtPostWords(id value) {
+    NSString *text = OhrtPostString(value);
+    if (!text) return nil;
+    text = [[text.lowercaseString componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"_,\n\r"]] componentsJoinedByString:@" "];
+    text = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    if (text.length > 40) text = [text substringToIndex:40];
+    return text.length ? text : nil;
+}
+
+// Why the post is in the feed, as far as the feed said: which of its
+// sources the post came from, what the request that brought it was made
+// for, and the weight and time its ranking gave it. The values are shown
+// as the server words them.
+static void OhrtPostAddWhy(NSMutableArray<NSString *> *facts, NSMutableArray<NSString *> *fields, id media) {
+    NSString *source = OhrtPostWords(OhrtCallValue(media, @"inventorySource"));
+    NSString *reason = OhrtPostWords(OhrtCallValue(media, @"mainFeedRequestReason"));
+    NSString *label = OhrtPostWords(OhrtCallValue(media, @"feedRankingSourceDebugLabel"));
+    NSNumber *weight = OhrtPostNumber(OhrtCallValue(media, @"rankingWeight"));
+    NSNumber *stamp = OhrtPostNumber(OhrtCallValue(media, @"rankedAt"));
+    if (source) [fields addObject:@"inventory_source"];
+    if (reason) [fields addObject:@"main_feed_request_reason"];
+    if (label) [fields addObject:@"feed_ranking_source_debug_label"];
+    if (weight) [fields addObject:@"ranking_weight"];
+    if (stamp) [fields addObject:@"ranked_at"];
+
+    if (source) [facts addObject:reason ? [NSString stringWithFormat:@"feed source %@ (request %@)", source, reason] : [@"feed source " stringByAppendingString:source]];
+    else if (reason) [facts addObject:[@"feed request " stringByAppendingString:reason]];
+
+    double value = weight.doubleValue;
+    NSDate *ranked = OhrtPostMade(stamp);
+    NSString *text = nil;
+    if (value != 0) text = [NSString stringWithFormat:fabs(value) >= 0.005 ? @"ranked %.2f" : @"ranked %.2g", value];
+    if (ranked) text = [NSString stringWithFormat:@"%@ at %@", text ?: @"ranked", OhrtPostMinute(ranked)];
+    if (label) text = text ? [NSString stringWithFormat:@"%@ (%@)", text, label] : [@"ranking label " stringByAppendingString:label];
+    if (text) [facts addObject:text];
+}
+
 static NSString *OhrtPostText(id media) {
     NSMutableArray<NSString *> *facts = [NSMutableArray array];
     NSMutableArray<NSString *> *fields = [NSMutableArray array];
@@ -142,6 +180,8 @@ static NSString *OhrtPostText(id media) {
     if (made && posted && [posted timeIntervalSinceDate:made] >= 10 * 60) {
         [facts addObject:[NSString stringWithFormat:@"made %@ (%@ before posting)", OhrtPostMinute(made), OhrtPostSpan([posted timeIntervalSinceDate:made])]];
     }
+
+    OhrtPostAddWhy(facts, fields, media);
 
     if ([OhrtPostNumber(OhrtCallValue(media, @"captionIsEdited")) boolValue]) [facts addObject:@"caption edited"];
 
