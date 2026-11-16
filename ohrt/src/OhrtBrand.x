@@ -28,6 +28,11 @@ static NSString *const kOhrtLaunchBuildKey = @"ohrt_launch_build";
 // larger than theirs.
 static const CGFloat kOhrtWordmarkGrow = 1.2;
 
+// Where the middle of the wordmark's small letters is, as a part of its
+// height from the top. Read off the drawing: its tall letters and the tail
+// of the g reach further up and down than that middle.
+static const CGFloat kOhrtWordmarkMiddle = 0.466;
+
 // What the login screen's logo is called in the asset catalog.
 static NSString *const kOhrtLoginLogo = @"Instagram";
 
@@ -35,6 +40,8 @@ static NSString *const kOhrtLoginLogo = @"Instagram";
 @end
 
 static char kOhrtOursKey;
+// On a picture of ours, the picture of theirs it stands in for.
+static char kOhrtTheirsKey;
 
 static UIImage *OhrtWordmarkSource(void) {
     static UIImage *image;
@@ -103,7 +110,12 @@ static CGRect OhrtInkBounds(UIImage *image) {
 // as large as fits inside the part of theirs that is drawn on, times
 // `grow`, and centred there. Grown past theirs, the picture grows with it,
 // evenly on each side. `what` names it in the log.
-static UIImage *OhrtMarkLike(UIImage *source, UIImage *theirs, BOOL template, NSString *what, CGFloat grow) {
+//
+// `level`, when it is a number, says where the middle of ours is to sit up
+// and down: that many points below the middle of the picture (above, when
+// negative). `middleOfOurs` is where that middle is in our drawing, as a
+// part of its height.
+static UIImage *OhrtMarkLike(UIImage *source, UIImage *theirs, BOOL template, NSString *what, CGFloat grow, CGFloat level, CGFloat middleOfOurs) {
     static NSCache *made;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -111,7 +123,7 @@ static UIImage *OhrtMarkLike(UIImage *source, UIImage *theirs, BOOL template, NS
     });
     CGSize canvas = theirs.size;
     if (!source || source.size.width < 1 || source.size.height < 1 || !(canvas.width >= 1 && canvas.height >= 1)) return nil;
-    NSString *key = [NSString stringWithFormat:@"%@ %.2f %.2f %d %.2f", what, canvas.width, canvas.height, template, grow];
+    NSString *key = [NSString stringWithFormat:@"%@ %.2f %.2f %d %.2f %.1f", what, canvas.width, canvas.height, template, grow, isnan(level) ? 999.0 : level];
     UIImage *ours = [made objectForKey:key];
     if (ours) return ours;
 
@@ -123,6 +135,18 @@ static UIImage *OhrtMarkLike(UIImage *source, UIImage *theirs, BOOL template, NS
     canvas = CGSizeMake(MAX(theirSize.width, ceil(size.width)), MAX(theirSize.height, ceil(size.height)));
     CGPoint middle = CGPointMake(CGRectGetMidX(ink) + (canvas.width - theirSize.width) / 2, CGRectGetMidY(ink) + (canvas.height - theirSize.height) / 2);
     CGRect place = CGRectMake(middle.x - size.width / 2, middle.y - size.height / 2, size.width, size.height);
+    if (!isnan(level)) {
+        // A button centres its picture, so the picture's middle is the
+        // line the level is measured from. Room is made evenly above and
+        // below, which keeps that middle where it is.
+        place.origin.y = canvas.height / 2 + level - size.height * middleOfOurs;
+        CGFloat reach = MAX(canvas.height / 2 - CGRectGetMinY(place), CGRectGetMaxY(place) - canvas.height / 2);
+        CGFloat needed = ceil(reach * 2);
+        if (needed > canvas.height) {
+            place.origin.y += (needed - canvas.height) / 2;
+            canvas.height = needed;
+        }
+    }
 
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
     format.opaque = NO;
@@ -133,10 +157,32 @@ static UIImage *OhrtMarkLike(UIImage *source, UIImage *theirs, BOOL template, NS
     ours = [drawn imageWithRenderingMode:template ? UIImageRenderingModeAlwaysTemplate : UIImageRenderingModeAlwaysOriginal];
     if (!ours) return nil;
     objc_setAssociatedObject(ours, &kOhrtOursKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(ours, &kOhrtTheirsKey, theirs, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [made setObject:ours forKey:key];
-    OhrtLog(@"brand: the %@ is %.0f by %.0f in place of theirs of %.0f by %.0f, which is drawn on over %.0f by %.0f", what, size.width, size.height,
-            theirSize.width, theirSize.height, ink.size.width, ink.size.height);
+    OhrtLog(@"brand: the %@ is %.0f by %.0f in place of theirs of %.0f by %.0f, which is drawn on over %.0f by %.0f; %@", what, size.width, size.height,
+            theirSize.width, theirSize.height, ink.size.width, ink.size.height,
+            isnan(level) ? @"centred on theirs" : [NSString stringWithFormat:@"its letters' middle %.1f below the picture's, in a picture %.0f tall", level, canvas.height]);
     return ours;
+}
+
+// How far below the middle of the logo's picture the middle of the header's
+// other buttons is, in points (negative when it is above). Not a number
+// when it cannot be told yet. With it the wordmark's letters are put level
+// with the heart and the plus, wherever Instagram set its own logo.
+static CGFloat OhrtHeaderLevel(UIView *header, UIButton *logo) {
+    if (!header.window) return NAN;
+    UIView *picture = logo.imageView;
+    if (!picture || picture.bounds.size.height < 1) return NAN;
+    CGFloat middle = [picture.superview convertPoint:picture.center toView:header].y;
+    static const char *const names[] = {"_createButton", "_activityButton", "_rightButton", "_secondaryRightButton", "_directButton"};
+    for (size_t index = 0; index < sizeof(names) / sizeof(names[0]); index++) {
+        Ivar ivar = class_getInstanceVariable([header class], names[index]);
+        UIView *other = ivar ? object_getIvar(header, ivar) : nil;
+        if (![other isKindOfClass:[UIView class]] || other.hidden || other.alpha < 0.01 || !other.window || other.bounds.size.height < 1) continue;
+        CGFloat level = round(([other.superview convertPoint:other.center toView:header].y - middle) * 2) / 2;
+        return fabs(level) <= 12 ? level : NAN;
+    }
+    return NAN;
 }
 
 static void OhrtPutWordmark(UIView *header) {
@@ -157,10 +203,18 @@ static void OhrtPutWordmark(UIView *header) {
     }
     if (!button) return;
     // No picture means a title is showing in its place.
-    if (!shown || objc_getAssociatedObject(shown, &kOhrtOursKey)) return;
+    if (!shown) return;
+    BOOL isOurs = objc_getAssociatedObject(shown, &kOhrtOursKey) != nil;
+    UIImage *theirs = isOurs ? objc_getAssociatedObject(shown, &kOhrtTheirsKey) : shown;
+    if (!theirs) return;
     // The button colours the picture, as it does theirs.
-    UIImage *ours = OhrtMarkLike(OhrtWordmarkSource(), shown, YES, @"wordmark", kOhrtWordmarkGrow);
-    if (!ours) return;
+    UIImage *ours = OhrtMarkLike(OhrtWordmarkSource(), theirs, YES, @"wordmark", kOhrtWordmarkGrow, OhrtHeaderLevel(header, button), kOhrtWordmarkMiddle);
+    if (!ours || ours == shown) return;
+    // Ours is redrawn when the level it should sit at turns out different.
+    // That settles in a step or two. Were it not to, the header would lay
+    // itself out for ever, so it is allowed only a few.
+    static int redrawn;
+    if (isOurs && ++redrawn > 8) return;
     [button setImage:ours forState:UIControlStateNormal];
     if ([button imageForState:UIControlStateNormal] != ours) {
         // The button did not keep what it was given. Asking again from
@@ -226,7 +280,7 @@ static BOOL OhrtLooksBranded(NSString *name) {
     // A logo taller than it is wide is their mark; a wide one is their name.
     BOOL wide = image.size.width > image.size.height * 2;
     BOOL template = wide || image.renderingMode == UIImageRenderingModeAlwaysTemplate;
-    UIImage *ours = OhrtMarkLike(wide ? OhrtWordmarkSource() : OhrtGlyphSource(), image, template, @"login logo", 1);
+    UIImage *ours = OhrtMarkLike(wide ? OhrtWordmarkSource() : OhrtGlyphSource(), image, template, @"login logo", 1, NAN, 0.5);
     return ours ?: image;
 }
 %end
