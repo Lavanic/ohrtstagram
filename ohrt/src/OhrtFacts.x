@@ -1,13 +1,16 @@
 // Facts on a profile: a line between the picture and the bio, small and
 // red, of what the app holds about the account and does not show.
 //
-//   id 1234567890, creator, joined 2019-03-02, follows you, followed since 2026-11-16, story 3h ago
+//   id 1234567890, creator, follows you since 2019-03-05, followed since 2019-03-02,
+//   214 likes (last 2026-10-30), 12 comments, 340 messages since 2020-01-10, story 3h ago
 //
-// Everything on the line is already in the app when the profile opens:
-// nothing is asked of Instagram for it. The one thing that is not
-// Instagram's is "followed since". Instagram does not say when a follow
-// happened, so that is our own note, made when a follow button is pressed
-// in this app, and it only knows the follows made here.
+// It has two sources, and nothing is asked of Instagram for either. The
+// first is what the app already holds when a profile opens: the id, the
+// kind of account, whether it follows you, its latest story. The second is
+// your own history with the account, which Instagram's app does not hold:
+// when each follow happened, how much you have liked, commented, watched
+// and written. That comes from your Instagram export (OhrtExport.m), and
+// for follows made in this app from our own note of the day.
 //
 // The line is put at the top of the cell that holds the bio: the cell is
 // made taller by as much as the line needs at the cell's width, wrapped,
@@ -120,6 +123,58 @@ static void OhrtNoteFollow(NSString *account, NSString *pk, BOOL following) {
     OhrtLog(@"facts: %@, %lu on record", following ? @"a follow noted" : @"a follow taken off the record", (unsigned long)dates.count);
 }
 
+static NSString *OhrtStamp(id seconds) {
+    return OhrtDay([NSDate dateWithTimeIntervalSince1970:[seconds doubleValue]]);
+}
+
+// "214 likes (last 2026-10-30)" from a count with its first and last day.
+static void OhrtAddTally(NSMutableArray<NSString *> *facts, id tally, NSString *one, NSString *many, BOOL withLast) {
+    if (![tally isKindOfClass:[NSArray class]] || [tally count] < 3) return;
+    NSInteger count = [tally[0] integerValue];
+    if (count < 1) return;
+    NSString *text = [NSString stringWithFormat:@"%ld %@", (long)count, count == 1 ? one : many];
+    if (withLast && [tally[2] doubleValue] > 0) text = [text stringByAppendingFormat:@" (last %@)", OhrtStamp(tally[2])];
+    [facts addObject:text];
+}
+
+// Your history with an account that is not your own: what the app says
+// stands now, with the days and counts the export and our own notes give.
+static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString *account, NSString *pk) {
+    NSDictionary *past = OhrtExportPerson(OhrtText(OhrtCall(user, @"username")));
+    BOOL followsYou = OhrtCallBool(user, @"followsCurrentUser");
+    BOOL followed = OhrtCallBool(user, @"followedByCurrentUser");
+
+    if (followsYou) [facts addObject:past[@"follows_you"] ? [@"follows you since " stringByAppendingString:OhrtStamp(past[@"follows_you"])] : @"follows you"];
+    else if (past[@"follows_you"]) [facts addObject:[NSString stringWithFormat:@"followed you from %@ but not now", OhrtStamp(past[@"follows_you"])]];
+
+    // The earlier of the export's day and the one noted here.
+    NSNumber *noted = OhrtFollowDates(account)[pk];
+    NSNumber *exported = past[@"followed"];
+    NSNumber *since = noted && exported ? (noted.doubleValue < exported.doubleValue ? noted : exported) : (noted ?: exported);
+    if (followed) {
+        if (since) [facts addObject:[@"followed since " stringByAppendingString:OhrtStamp(since)]];
+    } else if (past[@"unfollowed"]) {
+        [facts addObject:[@"unfollowed " stringByAppendingString:OhrtStamp(past[@"unfollowed"])]];
+    } else if (past[@"requested"]) {
+        [facts addObject:[@"requested " stringByAppendingString:OhrtStamp(past[@"requested"])]];
+    }
+
+    if (past[@"close_friend"]) [facts addObject:[@"close friend since " stringByAppendingString:OhrtStamp(past[@"close_friend"])]];
+    if (past[@"blocked"]) [facts addObject:[@"blocked " stringByAppendingString:OhrtStamp(past[@"blocked"])]];
+    if (past[@"restricted"]) [facts addObject:@"restricted"];
+    if (past[@"story_hidden"]) [facts addObject:@"your story is hidden from them"];
+
+    OhrtAddTally(facts, past[@"likes"], @"like", @"likes", YES);
+    OhrtAddTally(facts, past[@"comments"], @"comment", @"comments", NO);
+    OhrtAddTally(facts, past[@"story_likes"], @"story like", @"story likes", NO);
+    OhrtAddTally(facts, past[@"stories_seen"], @"story seen", @"stories seen", NO);
+    OhrtAddTally(facts, past[@"saved"], @"saved", @"saved", NO);
+
+    NSDictionary *thread = OhrtExportThread(OhrtText(OhrtCall(user, @"fullName")));
+    NSInteger messages = [thread[@"messages"] integerValue];
+    if (messages > 0) [facts addObject:[NSString stringWithFormat:@"%ld %@ since %@", (long)messages, messages == 1 ? @"message" : @"messages", OhrtStamp(thread[@"first"])]];
+}
+
 static NSString *OhrtFactsLine(id user) {
     NSString *pk = OhrtText(OhrtCall(user, @"pk"));
     if (!pk.length) return nil;
@@ -140,11 +195,7 @@ static NSString *OhrtFactsLine(id user) {
     if (joined) [facts addObject:[@"joined " stringByAppendingString:OhrtDay(joined)]];
 
     NSString *account = OhrtMyAccount();
-    if (account.length && ![account isEqualToString:pk]) {
-        if (OhrtCallBool(user, @"followsCurrentUser")) [facts addObject:@"follows you"];
-        NSNumber *since = OhrtCallBool(user, @"followedByCurrentUser") ? OhrtFollowDates(account)[pk] : nil;
-        if (since) [facts addObject:[@"followed since " stringByAppendingString:OhrtDay([NSDate dateWithTimeIntervalSince1970:since.doubleValue])]];
-    }
+    if (account.length && ![account isEqualToString:pk]) OhrtAddHistory(facts, user, account, pk);
 
     NSDate *story = OhrtDate(OhrtCall(user, @"latestReelMediaDate"));
     NSTimeInterval age = story ? -story.timeIntervalSinceNow : -1;

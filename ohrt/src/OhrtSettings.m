@@ -47,8 +47,13 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
             OhrtRestartSwitch(@"DM mode", @"Opens on your messages, with the home tab hidden", kOhrtDMModeKey),
         ], nil),
         OhrtSection(@"Profiles", @[
-            OhrtRestartSwitch(@"Facts on a profile", @"A line above the bio: the account's id, its kind, whether it follows you, when you followed it", kOhrtFactsKey),
-        ], @"All of it is already in the app when a profile opens. The follow date is ohrtstagram's own note, so it knows the follows made here."),
+            OhrtRestartSwitch(@"Facts on a profile", @"A line above the bio: the account's id and kind, and your history with it", kOhrtFactsKey),
+            [SCISetting staticCellWithTitle:@"Your export" subtitle:OhrtExportStatus() icon:nil],
+            [SCISetting buttonCellWithTitle:@"Read in an export" subtitle:@"The facts file that ohrt/tools/export.py makes from it" icon:nil action:^{
+                OhrtExportImport();
+            }],
+        ], @"What an account is comes from the app as its profile opens. When you followed each other and how much you have liked, watched and written "
+           @"comes from your Insta\u2060gram export, which holds what the app does not. It is read in here and stays on this phone."),
         OhrtSection(@"Look", @[
             OhrtRestartSwitch(@"ohrtstagram marks", @"Our wordmark at the top of the home feed and our mark on the login screen", kOhrtWordmarkKey),
             OhrtRestartSwitch(@"ohrtstagram in text", @"Buttons, titles and menus say ohrtstagram", kOhrtNameKey),

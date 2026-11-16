@@ -87,6 +87,13 @@ FOUNDATION_EXPORT UIViewController *OhrtFollowBackScreen(void);
 // tab bar exists.
 FOUNDATION_EXPORT id OhrtCurrentSession(void);
 
+// Your Instagram export, once read in (OhrtExport.m): what it says about
+// an account by username, and about a conversation by the other's name.
+FOUNDATION_EXPORT NSDictionary *OhrtExportPerson(NSString *username);
+FOUNDATION_EXPORT NSDictionary *OhrtExportThread(NSString *fullName);
+FOUNDATION_EXPORT NSString *OhrtExportStatus(void);
+FOUNDATION_EXPORT void OhrtExportImport(void);
+
 // The following feed is on by its own switch, or because the wall needs it.
 FOUNDATION_EXPORT BOOL OhrtFollowingFeedEnabled(void);
 
