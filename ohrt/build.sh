@@ -235,6 +235,11 @@ if [ "$STOCK" -eq 0 ]; then
     # the app's folder. Made from ohrt/brand/wordmark.svg by ipa.py wordmark.
     cp "$ROOT/ohrt/brand/wordmark.png" "$STAGE/OhrtWordmark.png"
     INJECT+=("$STAGE/OhrtWordmark.png")
+    # Our launch screen in place of Instagram's (ipa.py launch says how). Its
+    # picture is also what the tweak shows where the login screen has
+    # Instagram's logo.
+    python3 "$ROOT/ohrt/tools/ipa.py" launch "$IPA" "$ROOT/ohrt/brand/splash.png" "$STAGE/launch"
+    INJECT+=("$STAGE"/launch/*)
 fi
 # With the extensions gone the sideload fix only has the app to go into, so
 # cyan injects it. With them kept, ipapatch puts it into the app and into
@@ -249,7 +254,7 @@ if [ "$KEEP_EXTENSIONS" -eq 1 ]; then
 fi
 
 EXPECT=(SCInsta.dylib zxPluginsInject.dylib)
-[ "$STOCK" -eq 1 ] || EXPECT=(--settings --has OhrtWordmark.png "${EXPECT[@]}")
+[ "$STOCK" -eq 1 ] || EXPECT=(--settings --launch --has OhrtWordmark.png "${EXPECT[@]}")
 [ -z "$FLEX_DYLIB" ] || EXPECT+=(libFLEX.dylib)
 python3 "$ROOT/ohrt/tools/ipa.py" check "$OUT" "$NAME" "$BUNDLE_ID" "${EXPECT[@]}"
 say "Done: $ROOT/$OUT"

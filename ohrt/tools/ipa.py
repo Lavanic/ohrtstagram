@@ -8,7 +8,8 @@
                                             write our page for the Settings app
   ipa.py icons    <png> <folder>            write the app icon at every size
   ipa.py wordmark <svg> <png>               turn the wordmark's drawing into its picture
-  ipa.py check    <ipa> <name> <bundle-id> [--settings] [--has <file>]... <dylib>...
+  ipa.py launch   <ipa> <png> <folder>      write our launch screen from Instagram's
+  ipa.py check    <ipa> <name> <bundle-id> [--settings] [--launch] [--has <file>]... <dylib>...
                                             verify a built IPA and describe it
 """
 import plistlib
@@ -264,6 +265,55 @@ def command_wordmark(source, target):
     print(f"{target}: {image.width} by {image.height}")
 
 
+# What Instagram's launch screen calls its two pictures, and what ours are
+# called. A name is stored in the file with its length, so each stand-in is
+# exactly as long as the name it replaces and nothing else has to move.
+LAUNCH_NAMES = {b"logo-splash": b"ohrt-splash", b"fb-branding": b"ohrt-nomark"}
+LAUNCH_SCREENS = ("IGLaunchScreen.storyboardc", "IGLaunchScreenLarge.storyboardc")
+
+
+def command_launch(source, glyph, folder):
+    """Writes our launch screen: Instagram's own, with our mark where its logo was.
+
+    Instagram's launch screen is a compiled storyboard. It shows two pictures
+    by name: the logo in the middle of the screen, in a box 100 points
+    square, and "from Meta" at the bottom. The names are swapped for
+    "ohrt-splash", which is written here as loose pictures, and
+    "ohrt-nomark", a picture of nothing. Everything else stays as Instagram
+    laid it out.
+    """
+    import os
+    try:
+        from PIL import Image
+    except ImportError:
+        die("making the launch screen needs Pillow (pacman -S python-pillow)")
+    os.makedirs(folder, exist_ok=True)
+    with zipfile.ZipFile(source) as archive:
+        root = app_root(archive)
+        for screen in LAUNCH_SCREENS:
+            entries = [entry for entry in archive.namelist() if entry.startswith(f"{root}{screen}/") and not entry.endswith("/")]
+            if not entries:
+                die(f"this Instagram has no {screen}")
+            found = {name: 0 for name in LAUNCH_NAMES}
+            for entry in entries:
+                data = archive.read(entry)
+                for name, ours in LAUNCH_NAMES.items():
+                    found[name] += data.count(name)
+                    data = data.replace(name, ours)
+                target = os.path.join(folder, screen, entry[len(f"{root}{screen}/"):])
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with open(target, "wb") as handle:
+                    handle.write(data)
+            for name, count in found.items():
+                if count != 1:
+                    die(f"{screen} names the picture {name.decode()} {count} times, not once: its layout has changed")
+    with Image.open(glyph) as image:
+        image = image.convert("RGBA")
+        for scale in (2, 3):
+            image.resize((100 * scale, 100 * scale), Image.LANCZOS).save(os.path.join(folder, f"ohrt-splash@{scale}x.png"), optimize=True)
+    Image.new("RGBA", (1, 1), (0, 0, 0, 0)).save(os.path.join(folder, "ohrt-nomark.png"))
+
+
 def command_check(path, name, bundle_id, *dylibs):
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
@@ -273,6 +323,15 @@ def command_check(path, name, bundle_id, *dylibs):
         problems = unresolved(archive, root, names)
 
     dylibs = list(dylibs)
+    if "--launch" in dylibs:
+        dylibs.remove("--launch")
+        with zipfile.ZipFile(path) as archive:
+            for screen in LAUNCH_SCREENS:
+                nibs = b"".join(archive.read(entry) for entry in names if entry.startswith(f"{root}{screen}/") and entry.endswith(".nib"))
+                for theirs, ours in LAUNCH_NAMES.items():
+                    if theirs in nibs or ours not in nibs:
+                        problems.append(f"{screen} still shows Instagram's {theirs.decode()}")
+        dylibs += ["--has", "ohrt-splash@2x.png", "--has", "ohrt-splash@3x.png", "--has", "ohrt-nomark.png"]
     while "--has" in dylibs:
         at = dylibs.index("--has")
         if at + 1 >= len(dylibs):
@@ -326,7 +385,8 @@ def command_check(path, name, bundle_id, *dylibs):
 
 
 COMMANDS = {"version": command_version, "precheck": command_precheck, "add": command_add, "settings": command_settings,
-            "icons": command_icons, "wordmark": command_wordmark, "check": command_check}
+            "icons": command_icons, "wordmark": command_wordmark, "launch": command_launch,
+            "check": command_check}
 
 if __name__ == "__main__":
     if len(sys.argv) < 3 or sys.argv[1] not in COMMANDS:

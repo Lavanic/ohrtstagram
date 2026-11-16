@@ -107,7 +107,7 @@ static void OhrtAppLaunching(void) {
     // default, and one of ours defaults to on.
     OhrtRegisterDefaults();
     OhrtGuardAppLaunching();
-    OhrtInstallWordmark();
+    OhrtInstallBrand();
     OhrtInstallDMMode();
     OhrtInstallFollowing();
     OhrtInstallWall();

@@ -44,7 +44,7 @@ FOUNDATION_EXPORT void OhrtGuardAppLaunching(void);
 FOUNDATION_EXPORT void OhrtInstallDMMode(void);
 FOUNDATION_EXPORT void OhrtInstallFollowing(void);
 FOUNDATION_EXPORT void OhrtInstallWall(void);
-FOUNDATION_EXPORT void OhrtInstallWordmark(void);
+FOUNDATION_EXPORT void OhrtInstallBrand(void);
 
 // What a feature needs from the Instagram that is running (OhrtNeeds.m).
 FOUNDATION_EXPORT NSString *OhrtMissing(NSString *feature);
