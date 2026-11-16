@@ -259,11 +259,15 @@ static CGFloat OhrtPostTextHeight(NSString *text, CGFloat width) {
 @property (nonatomic, copy) NSString *mediaId;
 @property (nonatomic, strong) id row;
 @property (nonatomic, weak) id controller;
-// A hidden like count that has just come in runs up to its number.
+// A hidden like count that has just come in runs up to its number, from
+// zero, or from the number shown before when it was read again.
 @property (nonatomic, strong) CADisplayLink *ticker;
 @property (nonatomic) CFTimeInterval tickStart;
+@property (nonatomic) long long tickFrom;
 @property (nonatomic) long long tickTarget;
 @property (nonatomic) BOOL tickMore;
+// The hidden count the label shows, or -1.
+@property (nonatomic) long long shownCount;
 @end
 
 static const CFTimeInterval kOhrtTickTime = 0.9;
@@ -281,12 +285,21 @@ static NSHashTable<OhrtPostFactsCell *> *gOhrtPostCells;
         _label.numberOfLines = 0;
         _label.lineBreakMode = NSLineBreakByWordWrapping;
         [self.contentView addSubview:_label];
+        _shownCount = -1;
     }
     return self;
 }
 
-- (void)tickTo:(long long)count more:(BOOL)more {
+- (void)show {
+    long long count = 0;
+    BOOL more = NO;
+    self.shownCount = OhrtLikesCountedNumber(self.mediaId, &count, &more) ? count : -1;
+    self.label.text = OhrtPostShown(self.row);
+}
+
+- (void)tickFrom:(long long)from to:(long long)count more:(BOOL)more {
     [self stopTicking];
+    self.tickFrom = from;
     self.tickTarget = count;
     self.tickMore = more;
     self.tickStart = CACurrentMediaTime();
@@ -298,9 +311,12 @@ static NSHashTable<OhrtPostFactsCell *> *gOhrtPostCells;
 - (void)tick:(CADisplayLink *)link {
     double progress = MIN(1.0, (CACurrentMediaTime() - self.tickStart) / kOhrtTickTime);
     double eased = 1 - pow(1 - progress, 3);
-    long long now = progress >= 1 ? self.tickTarget : (long long)llround(self.tickTarget * eased);
+    long long now = progress >= 1 ? self.tickTarget : self.tickFrom + (long long)llround((self.tickTarget - self.tickFrom) * eased);
     self.label.text = OhrtPostJoined(OhrtPostLikesFact(now, self.tickMore && progress >= 1), OhrtPostString(OhrtCall(self.row, @"value")));
-    if (progress >= 1) [self stopTicking];
+    if (progress >= 1) {
+        self.shownCount = self.tickTarget;
+        [self stopTicking];
+    }
 }
 
 - (void)stopTicking {
@@ -311,6 +327,7 @@ static NSHashTable<OhrtPostFactsCell *> *gOhrtPostCells;
 - (void)prepareForReuse {
     [super prepareForReuse];
     [self stopTicking];
+    self.shownCount = -1;
 }
 
 - (void)layoutSubviews {
@@ -321,6 +338,9 @@ static NSHashTable<OhrtPostFactsCell *> *gOhrtPostCells;
 }
 
 @end
+
+// The post id of a section's facts row when its likes are hidden, or nil.
+static NSString *OhrtPostHiddenMediaIn(id controller);
 
 // Asked for every row of every post, so kept cheap.
 static id OhrtPostRowAt(id controller, NSInteger index) {
@@ -336,6 +356,15 @@ static id OhrtPostRowAt(id controller, NSInteger index) {
     id row = ((id (*)(id, SEL, NSInteger))objc_msgSend)(controller, rowAt, index);
     if (!rowClass || ![row isKindOfClass:rowClass] || ((int (*)(id, SEL))objc_msgSend)(row, type) != kOhrtPostFactsRow) return nil;
     return row;
+}
+
+static NSString *OhrtPostHiddenMediaIn(id controller) {
+    NSInteger count = [OhrtCallValue(controller, @"numberOfItems") integerValue];
+    for (NSInteger index = 0; index < count && index < 40; index++) {
+        id row = OhrtPostRowAt(controller, index);
+        if (row) return objc_getAssociatedObject(row, &kOhrtRowMediaKey);
+    }
+    return nil;
 }
 
 static CGFloat OhrtPostWidth(id controller) {
@@ -379,7 +408,6 @@ static void OhrtPostAddRow(id model, id media) {
     if (hidden) {
         objc_setAssociatedObject(ours, &kOhrtRowHiddenKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(ours, &kOhrtRowMediaKey, OhrtMediaId(media), OBJC_ASSOCIATION_COPY_NONATOMIC);
-        OhrtLikesDescribe(media);
     }
     NSMutableArray *with = [rows mutableCopy];
     [with insertObject:ours atIndex:buttons + 1];
@@ -429,8 +457,8 @@ static void OhrtPostAddRow(id model, id media) {
     OhrtPostFactsCell *cell = ((id (*)(id, SEL, Class, id, NSInteger))objc_msgSend)(context, dequeue, [OhrtPostFactsCell class], self, index);
     if ([cell isKindOfClass:[OhrtPostFactsCell class]]) {
         cell.mediaId = objc_getAssociatedObject(row, &kOhrtRowMediaKey);
-        cell.label.text = OhrtPostShown(row);
         cell.row = row;
+        [cell show];
         cell.controller = self;
         if (!gOhrtPostCells) gOhrtPostCells = [NSHashTable weakObjectsHashTable];
         [gOhrtPostCells addObject:cell];
@@ -439,17 +467,37 @@ static void OhrtPostAddRow(id model, id media) {
     return cell;
 }
 
-// A cell is made a little before it scrolls into view. Its hidden likes are
-// read when it is actually shown, the newest shown first.
+// Cells are made a little before they scroll into view. A post's hidden
+// likes are asked for when its top comes on screen, which is a picture's
+// height before its facts row does, and the request is dropped if the post
+// leaves the screen before its turn.
+- (void)deprecatedListAdapter:(id)adapter willDisplaySectionController:(id)controller {
+    %orig;
+    OhrtTry(@"likes", ^{
+        NSString *mediaId = OhrtPostHiddenMediaIn(self);
+        if (!mediaId || OhrtLikesIsFresh(mediaId)) return;
+        static BOOL said;
+        if (!said) OhrtLog(@"likes: asked as a post came on screen");
+        said = YES;
+        OhrtLikesWant(mediaId);
+    });
+}
+
+- (void)deprecatedListAdapter:(id)adapter didEndDisplayingSectionController:(id)controller {
+    %orig;
+    OhrtTry(@"likes", ^{
+        OhrtLikesUnwant(OhrtPostHiddenMediaIn(self));
+    });
+}
+
+// The facts row itself coming on screen, in case the whole post's notice
+// does not come.
 - (void)deprecatedListAdapter:(id)adapter willDisplaySectionController:(id)controller cell:(UICollectionViewCell *)cell atIndex:(NSInteger)index {
     %orig;
     if (![cell isKindOfClass:[OhrtPostFactsCell class]]) return;
     NSString *mediaId = ((OhrtPostFactsCell *)cell).mediaId;
-    if (!mediaId || OhrtLikesCountedFor(mediaId)) return;
+    if (!mediaId || OhrtLikesIsFresh(mediaId)) return;
     OhrtTry(@"likes", ^{
-        static BOOL said;
-        if (!said) OhrtLog(@"likes: asked as a post came on screen");
-        said = YES;
         OhrtLikesWant(mediaId);
     });
 }
@@ -495,11 +543,21 @@ void OhrtInstallPostFacts(void) {
             OhrtTry(@"post facts", ^{
                 for (OhrtPostFactsCell *cell in gOhrtPostCells.allObjects) {
                     if (!cell.mediaId || ![cell.mediaId isEqual:note.object]) continue;
+                    // A count already running up finishes on its own.
+                    if (cell.ticker) continue;
                     long long count = 0;
                     BOOL more = NO;
-                    if (cell.window && [cell.label.text hasPrefix:@"counting hidden likes"] && OhrtLikesCountedNumber(cell.mediaId, &count, &more)) [cell tickTo:count more:more];
-                    else cell.label.text = OhrtPostShown(cell.row);
+                    BOOL counted = OhrtLikesCountedNumber(cell.mediaId, &count, &more);
+                    NSString *before = cell.label.text;
+                    NSString *after = OhrtPostShown(cell.row);
+                    if (counted && cell.window && [before hasPrefix:@"counting hidden likes"]) [cell tickFrom:0 to:count more:more];
+                    else if (counted && cell.window && cell.shownCount >= 0 && cell.shownCount != count) [cell tickFrom:cell.shownCount to:count more:more];
+                    else [cell show];
                     [cell setNeedsLayout];
+                    // The row is measured again only when the text needs
+                    // another height.
+                    CGFloat width = cell.bounds.size.width - 2 * OhrtPostSide();
+                    if (OhrtPostTextHeight(before, width) == OhrtPostTextHeight(after, width)) continue;
                     id controller = cell.controller;
                     id context = OhrtCall(controller, @"collectionContext");
                     SEL invalidate = NSSelectorFromString(@"invalidateLayoutForSectionController:completion:");

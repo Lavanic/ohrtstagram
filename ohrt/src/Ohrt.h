@@ -60,20 +60,22 @@ FOUNDATION_EXPORT void OhrtInstallSuggested(void);
 FOUNDATION_EXPORT void OhrtInstallMessages(void);
 FOUNDATION_EXPORT void OhrtInstallLikes(void);
 FOUNDATION_EXPORT void OhrtInstallPostFacts(void);
-// The like count of a post that hides it, as counted from who liked it
-// (OhrtLikes.x), such as "1,234 likes", or nil until that has been read.
-// OhrtLikesWant asks for it to be read; main thread. When it has been read, or has
-// left the queue unread, kOhrtLikesCountedNotification is posted on the
-// main thread with the post's id as its object.
+
+// The like count of a post that hides it, counted from who liked it
+// (OhrtLikes.x): the number, and whether it is only a floor; NO until it
+// has been read. OhrtLikesWant asks for it to be read and OhrtLikesUnwant
+// takes that back; main thread. When it has been read, or has left the
+// queue unread, kOhrtLikesCountedNotification is posted on the main thread
+// with the post's id as its object.
 FOUNDATION_EXPORT NSString *OhrtMediaId(id media);
-FOUNDATION_EXPORT NSString *OhrtLikesCountedFor(NSString *mediaId);
-// The same as a number, and whether it is only a floor.
 FOUNDATION_EXPORT BOOL OhrtLikesCountedNumber(NSString *mediaId, long long *count, BOOL *more);
 FOUNDATION_EXPORT void OhrtLikesWant(NSString *mediaId);
+FOUNDATION_EXPORT void OhrtLikesUnwant(NSString *mediaId);
+// Counted within the last few hours, so not read again yet.
+FOUNDATION_EXPORT BOOL OhrtLikesIsFresh(NSString *mediaId);
 // Whether a hidden count not yet read is still going to be: the switch is
 // on, reading is not paused, and the post was not given up on.
 FOUNDATION_EXPORT BOOL OhrtLikesWillCount(NSString *mediaId);
-FOUNDATION_EXPORT void OhrtLikesDescribe(id media);
 FOUNDATION_EXPORT NSString *const kOhrtLikesCountedNotification;
 
 // The small red text of the facts lines (OhrtFacts.x), on a profile and
