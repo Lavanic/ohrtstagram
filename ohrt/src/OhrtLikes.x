@@ -1,12 +1,14 @@
 // The like count of a post whose owner hid it.
 //
 // Instagram does not send that count: a post with hidden likes comes with
-// a stand-in, the real count up to 3 and then 3, the same for everyone. What
-// it does still give is who liked it, but only the first hundred or so
-// names. So the count is taken from the list: exact when it is short, and
-// "at least" what it names when it is full. Should the server offer a next
-// page, up to ten are read; and once a run, a full list is tried again as
-// the newest-first list, in case that one names more.
+// a stand-in, the real count up to 3 and then 3, the same for everyone. Of
+// the two lists of who liked a post, the usual one ("/media/<id>/likers/")
+// names about a hundred and gives the same stand-in as its total. The
+// newest-first one ("/media/<id>/likers_chrono/") gives the real total
+// (145 for a post whose usual list said 3), so that is read, and the usual
+// one only if it fails. A total that is still a stand-in falls back to the
+// names counted, as "at least" when the list is full; should the server
+// then offer a next page, up to ten are read.
 //
 // The list is asked for when a hidden post's facts row comes on screen,
 // through the same reader and the same request ("/media/<id>/likers/") as
@@ -27,8 +29,9 @@ NSString *const kOhrtLikesCountedNotification = @"OhrtLikesCounted";
 // The first key held full lists counted as exact; they are dropped.
 static NSString *const kOhrtCountedKey = @"ohrt_counted_likes_2";
 static NSString *const kOhrtCountedOldKey = @"ohrt_counted_likes";
-// Instagram names at most about this many likers for a post.
-static const long long kOhrtLikersNamed = 100;
+// The usual list names about a hundred, sometimes fewer: from this many on,
+// a list whose total is a stand-in is taken as full.
+static const long long kOhrtLikersFloor = 80;
 static NSString *const kOhrtAskedKey = @"ohrt_likers_asked";
 static NSString *const kOhrtPausedKey = @"ohrt_likers_paused";
 static const NSUInteger kOhrtCountedKept = 500;
@@ -136,7 +139,7 @@ static void OhrtLikesFromList(id source, NSString *how, long long *count, BOOL *
     *count = MAX(listed + MAX(anonymous, 0), total);
     // A full list stops at about a hundred names and says there are no
     // more, so a count that reaches that is only a floor.
-    *plus = (more && listed + anonymous >= total) || (listed >= kOhrtLikersNamed && total < listed);
+    *plus = total <= 3 && listed + anonymous > total && listed >= kOhrtLikersFloor;
     static NSUInteger told;
     if (told < 10) {
         told++;
@@ -170,8 +173,10 @@ void OhrtLikesDescribe(id media) {
 @interface OhrtLikersFetch : NSObject
 @property (nonatomic, copy) NSString *mediaId;
 @property (nonatomic, strong) id source;
-// The chronological list, tried once to see whether it names more.
+// The newest-first list, which gives the real total. If it fails, the
+// usual list is read instead.
 @property (nonatomic) BOOL chrono;
+@property (nonatomic) BOOL wantsPlain;
 @property (nonatomic) NSUInteger pages;
 @property (nonatomic) NSUInteger generation;
 // Account ids named so far, so that a page repeating another is not counted
@@ -204,7 +209,9 @@ static void OhrtLikersPageArrived(OhrtLikersFetch *fetch);
         if (!self.done) return;
         BOOL connection = OhrtIsConnectionError(OhrtCallValue(self.source, @"fetchError"));
         OhrtLog(@"likes: reading %@ failed, %@", self.chrono ? @"the newest likers" : @"who liked a post", connection ? @"the connection" : @"refused");
-        // The chronological list may simply not be for anyone but the owner.
+        // The newest-first list may not be open to everyone for every post;
+        // the usual one is tried before treating it as a refusal.
+        if (self.chrono && !connection) self.wantsPlain = YES;
         [self end:!connection && !self.chrono];
     });
 }
@@ -227,7 +234,9 @@ static OhrtLikersFetch *gOhrtFetching;
 static NSTimeInterval gOhrtNextAsk;
 static NSTimeInterval gOhrtPausedUntil;
 static BOOL gOhrtPumpScheduled;
-static BOOL gOhrtTriedChrono;
+// Posts given up on this run: failed, skipped or scrolled past. Shown with
+// no count until they come on screen again.
+static NSMutableSet<NSString *> *gOhrtSkipped;
 
 // When reads were made in the last day, and any pause, survive a restart.
 static void OhrtLikesLoadLimits(void) {
@@ -280,9 +289,23 @@ static void OhrtLikesNoteAsk(void) {
     gOhrtNextAsk = now + kOhrtLikersGap + arc4random_uniform(1000) / 1000.0;
 }
 
+static void OhrtLikesSkip(NSString *mediaId) {
+    if (!mediaId) return;
+    if (!gOhrtSkipped) gOhrtSkipped = [NSMutableSet set];
+    [gOhrtSkipped addObject:mediaId];
+}
+
 static void OhrtLikesDrop(NSString *mediaId) {
     [gOhrtWanted removeObject:mediaId];
+    if (!OhrtLikesCountedFor(mediaId)) OhrtLikesSkip(mediaId);
     OhrtLikesAnnounce(mediaId);
+}
+
+BOOL OhrtLikesWillCount(NSString *mediaId) {
+    if (!mediaId || !OhrtFeature(kOhrtLikesKey) || OhrtSafeLaunch()) return NO;
+    OhrtLikesLoadLimits();
+    if (gOhrtPausedUntil > [NSDate date].timeIntervalSince1970) return NO;
+    return ![gOhrtSkipped containsObject:mediaId];
 }
 
 static void OhrtLikesPump(void);
@@ -330,6 +353,9 @@ static BOOL OhrtLikersStart(NSString *mediaId, BOOL chrono) {
     __weak OhrtLikersFetch *weakFetch = fetch;
     fetch.done = ^(BOOL refused) {
         if (gOhrtFetching == weakFetch) gOhrtFetching = nil;
+        NSTimeInterval retryAt = 0;
+        if (weakFetch.wantsPlain && OhrtLikesMayAsk(&retryAt) && OhrtLikersStart(mediaId, NO)) return;
+        if (!OhrtLikesCountedFor(mediaId)) OhrtLikesSkip(mediaId);
         OhrtLikesAnnounce(mediaId);
         if (refused) {
             gOhrtPausedUntil = [NSDate date].timeIntervalSince1970 + kOhrtLikersPause;
@@ -366,9 +392,13 @@ static void OhrtLikersPageArrived(OhrtLikersFetch *fetch) {
     id cursor = OhrtCallValue(source, @"maxID");
     BOOL hasCursor = ([cursor isKindOfClass:[NSString class]] && [cursor length]) || [cursor isKindOfClass:[NSNumber class]];
     BOOL more = [OhrtCallValue(source, @"moreAvailable") boolValue];
-    long long count = MAX(named + anonymous, total);
-    BOOL full = named >= kOhrtLikersNamed && total < named;
-    BOOL another = more && hasCursor && fetch.pages < kOhrtLikersPages;
+    // A total above the stand-in's ceiling, or one the names do not pass,
+    // is the real count. Otherwise the names are the count, and a full list
+    // of them only a floor.
+    BOOL real = total > 3 || total >= named + anonymous;
+    long long count = real ? MAX(total, named + anonymous) : named + anonymous;
+    BOOL full = !real && named >= kOhrtLikersFloor;
+    BOOL another = full && more && hasCursor && fetch.pages < kOhrtLikersPages;
 
     static NSUInteger told;
     if (told < 12) {
@@ -377,10 +407,8 @@ static void OhrtLikersPageArrived(OhrtLikersFetch *fetch) {
                 (unsigned long)fetch.pages, named, anonymous, total, hasCursor ? @"a" : @"no", more ? @"says" : @"no");
     }
 
-    long long before = 0;
-    OhrtLikesCountedNumber(fetch.mediaId, &before, NULL);
-    if (count > 0 && (!fetch.chrono || count > before)) {
-        OhrtLikesKeep(fetch.mediaId, count, full || another || (more && !hasCursor));
+    if (count > 0) {
+        OhrtLikesKeep(fetch.mediaId, count, full);
         OhrtLikesAnnounce(fetch.mediaId);
     }
 
@@ -405,19 +433,6 @@ static void OhrtLikersPageArrived(OhrtLikersFetch *fetch) {
         }
     }
     [fetch end:NO];
-
-    // A full list with no way on: once a run, see whether the newest-first
-    // list for the same post names more.
-    if (full && !hasCursor && !fetch.chrono && !gOhrtTriedChrono) {
-        gOhrtTriedChrono = YES;
-        NSString *mediaId = fetch.mediaId;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((kOhrtLikersGap + 0.5) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            OhrtTry(@"likes", ^{
-                NSTimeInterval retryAt = 0;
-                if (gOhrtFetching || !OhrtLikesMayAsk(&retryAt) || !OhrtLikersStart(mediaId, YES)) gOhrtTriedChrono = NO;
-            });
-        });
-    }
 }
 
 static void OhrtLikesPump(void) {
@@ -436,12 +451,7 @@ static void OhrtLikesPump(void) {
         return;
     }
     [gOhrtWanted removeObject:mediaId];
-    if (!OhrtLikersStart(mediaId, NO)) OhrtLikesAnnounce(mediaId);
-}
-
-BOOL OhrtLikesPending(NSString *mediaId) {
-    if (!mediaId) return NO;
-    return [gOhrtWanted containsObject:mediaId] || [gOhrtFetching.mediaId isEqualToString:mediaId];
+    if (!OhrtLikersStart(mediaId, YES)) OhrtLikesDrop(mediaId);
 }
 
 void OhrtLikesWant(NSString *mediaId) {
@@ -450,6 +460,10 @@ void OhrtLikesWant(NSString *mediaId) {
     if (gOhrtPausedUntil > [NSDate date].timeIntervalSince1970) return;
     if ([gOhrtFetching.mediaId isEqualToString:mediaId]) return;
     if (!gOhrtWanted) gOhrtWanted = [NSMutableOrderedSet orderedSet];
+    if ([gOhrtSkipped containsObject:mediaId]) {
+        [gOhrtSkipped removeObject:mediaId];
+        OhrtLikesAnnounce(mediaId);
+    }
     // On screen again: to the front.
     [gOhrtWanted removeObject:mediaId];
     [gOhrtWanted addObject:mediaId];

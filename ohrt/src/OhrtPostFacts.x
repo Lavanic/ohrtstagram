@@ -231,7 +231,7 @@ static NSString *OhrtPostShown(id row) {
     long long count = 0;
     BOOL more = NO;
     if (OhrtLikesCountedNumber(mediaId, &count, &more)) return OhrtPostJoined(OhrtPostLikesFact(count, more), base);
-    return OhrtPostJoined(OhrtLikesPending(mediaId) ? @"counting hidden likes\u2026" : nil, base);
+    return OhrtPostJoined(OhrtLikesWillCount(mediaId) ? @"counting hidden likes\u2026" : nil, base);
 }
 
 static CGFloat OhrtPostTextHeight(NSString *text, CGFloat width) {
@@ -429,9 +429,6 @@ static void OhrtPostAddRow(id model, id media) {
     OhrtPostFactsCell *cell = ((id (*)(id, SEL, Class, id, NSInteger))objc_msgSend)(context, dequeue, [OhrtPostFactsCell class], self, index);
     if ([cell isKindOfClass:[OhrtPostFactsCell class]]) {
         cell.mediaId = objc_getAssociatedObject(row, &kOhrtRowMediaKey);
-        // The post is on screen: its hidden likes are read now, ahead of
-        // any waiting.
-        if (cell.mediaId && !OhrtLikesCountedFor(cell.mediaId)) OhrtLikesWant(cell.mediaId);
         cell.label.text = OhrtPostShown(row);
         cell.row = row;
         cell.controller = self;
@@ -440,6 +437,21 @@ static void OhrtPostAddRow(id model, id media) {
         [cell setNeedsLayout];
     }
     return cell;
+}
+
+// A cell is made a little before it scrolls into view. Its hidden likes are
+// read when it is actually shown, the newest shown first.
+- (void)deprecatedListAdapter:(id)adapter willDisplaySectionController:(id)controller cell:(UICollectionViewCell *)cell atIndex:(NSInteger)index {
+    %orig;
+    if (![cell isKindOfClass:[OhrtPostFactsCell class]]) return;
+    NSString *mediaId = ((OhrtPostFactsCell *)cell).mediaId;
+    if (!mediaId || OhrtLikesCountedFor(mediaId)) return;
+    OhrtTry(@"likes", ^{
+        static BOOL said;
+        if (!said) OhrtLog(@"likes: asked as a post came on screen");
+        said = YES;
+        OhrtLikesWant(mediaId);
+    });
 }
 
 - (void)didSelectItemAtIndex:(NSInteger)index {

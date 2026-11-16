@@ -85,6 +85,7 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("postfacts", "IGFeedSectionControllerOld", "sizeForItemAtIndex:"),
     OHRT_NEED("postfacts", "IGFeedSectionControllerOld", "cellForItemAtIndex:"),
     OHRT_NEED("postfacts", "IGFeedSectionControllerOld", "didSelectItemAtIndex:"),
+    OHRT_NEED("postfacts", "IGFeedSectionControllerOld", "deprecatedListAdapter:willDisplaySectionController:cell:atIndex:"),
     OHRT_NEED("postfacts", "IGFeedSectionControllerOld", "analyticsItemTypeAtIndex:"),
     OHRT_NEED("postfacts", "IGFeedItemRow", "initWithType:textType:value:"),
     OHRT_NEED("postfacts", "IGFeedItemRow", "type"),
