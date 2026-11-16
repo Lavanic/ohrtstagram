@@ -111,7 +111,7 @@ BOOL OhrtFeatureReady(NSString *key, NSString *feature) {
 NSString *OhrtSelfCheck(void) {
     NSMutableString *report = [NSMutableString string];
     NSString *instagram = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
-    [report appendFormat:@"ohrtstagram %@ on Instagram %@, iOS %@\n", OHRT_VERSION, instagram, [UIDevice currentDevice].systemVersion];
+    [report appendFormat:@"ohrtstagram %@ (%@) on Instagram %@, iOS %@\n", OHRT_VERSION, OHRT_BUILD, instagram, [UIDevice currentDevice].systemVersion];
     [report appendFormat:@"safe mode this start: %@\n", OhrtSafeLaunch() ? @"yes" : @"no"];
     for (NSString *feature in @[ @"start", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
         NSString *missing = OhrtMissing(feature);

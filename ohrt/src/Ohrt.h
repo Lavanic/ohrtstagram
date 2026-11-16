@@ -9,6 +9,8 @@ FOUNDATION_EXPORT void OhrtHookMessage(Class cls, SEL selector, IMP replacement,
 #define MSHookMessageEx OhrtHookMessage
 
 #define OHRT_VERSION @"0.1.0"
+// OHRT_BUILD, the commit this was built from. Written by ohrt/build.sh.
+#import "OhrtBuild.h"
 
 // Settings, all in the app's own preferences.
 FOUNDATION_EXPORT NSString *const kOhrtBudgetMinutesKey;  // minutes a day; 0 is no budget

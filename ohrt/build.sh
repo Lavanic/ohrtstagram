@@ -117,6 +117,15 @@ if [ "$QUICK" -eq 0 ]; then
     rm -rf .theos
 fi
 
+# Which commit this is, for the log and the self-check, so a line read off
+# the phone says which build wrote it. A plus marks changes not committed.
+if [ "$STOCK" -eq 0 ]; then
+    BUILD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    [ -z "$(git status --porcelain -- ohrt src 2>/dev/null)" ] || BUILD="$BUILD+"
+    printf '#define OHRT_BUILD @"%s"\n' "$BUILD" > ohrt/src/OhrtBuild.h.new
+    if cmp -s ohrt/src/OhrtBuild.h.new ohrt/src/OhrtBuild.h; then rm ohrt/src/OhrtBuild.h.new; else mv ohrt/src/OhrtBuild.h.new ohrt/src/OhrtBuild.h; fi
+fi
+
 say "Building the tweak ($(echo "$FILES" | wc -w) files)"
 # Variables given on the command line win over the Makefile's, which is how
 # the source list is replaced without editing upstream's Makefile.

@@ -105,6 +105,8 @@ static void OhrtAppLaunching(void) {
 // If that hook ever fails to attach, this still gets the features in, late
 // but in, and the self-check in settings shows the hook as missing.
 __attribute__((constructor)) static void OhrtCoreLoad(void) {
+    OhrtLog(@"ohrtstagram %@ (%@) loaded into %@ %@", OHRT_VERSION, OHRT_BUILD, [NSBundle mainBundle].bundleIdentifier,
+            [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"]);
     [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil queue:[NSOperationQueue mainQueue]
                                                   usingBlock:^(NSNotification *note) {
         OhrtAppLaunching();
