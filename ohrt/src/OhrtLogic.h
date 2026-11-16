@@ -67,6 +67,23 @@ static inline size_t OhrtCountAfter(const double *times, size_t count, double af
     return counted;
 }
 
+// 12347 as "12,347", the way a count is written out in full.
+static inline void OhrtGroupDigits(long long count, char *text, size_t size) {
+    char digits[24];
+    unsigned long long magnitude = count < 0 ? 0ULL - (unsigned long long)count : (unsigned long long)count;
+    snprintf(digits, sizeof(digits), "%llu", magnitude);
+    size_t length = strlen(digits), at = 0;
+    if (count < 0 && at + 1 < size) text[at++] = '-';
+    for (size_t index = 0; index < length && at + 1 < size; index++) {
+        if (index && (length - index) % 3 == 0) {
+            text[at++] = ',';
+            if (at + 1 >= size) break;
+        }
+        text[at++] = digits[index];
+    }
+    if (size) text[at < size ? at : size - 1] = 0;
+}
+
 // Messages
 //
 // A message is kept as two numbers: its time in milliseconds since 1970,

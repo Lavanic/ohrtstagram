@@ -47,8 +47,9 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         OhrtSection(@"Mode", @[
             OhrtRestartSwitch(@"DM mode", @"Opens on your messages, with the home tab hidden", kOhrtDMModeKey),
         ], nil),
-        OhrtSection(@"Profiles", @[
+        OhrtSection(@"Facts", @[
             OhrtRestartSwitch(@"Facts on a profile", @"Above a profile's buttons: the account's id and kind, and your history with it", kOhrtFactsKey),
+            OhrtRestartSwitch(@"Facts on a post", @"Under a post's buttons: when it was made and posted, exact counts, and what Insta\u2060gram's AI sees in it", kOhrtPostFactsKey),
             [SCISetting staticCellWithTitle:@"Your export" subtitle:OhrtExportStatus() icon:nil],
             [SCISetting buttonCellWithTitle:@"Read in an export" subtitle:@"Unpack its zip in Files, then pick the folder" icon:nil action:^{
                 OhrtExportImport();

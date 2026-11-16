@@ -36,6 +36,32 @@ id OhrtCall(id object, NSString *selector) {
     return ((id (*)(id, SEL))objc_msgSend)(object, sel);
 }
 
+id OhrtCallValue(id object, NSString *selector) {
+    SEL sel = NSSelectorFromString(selector);
+    if (!object || ![object respondsToSelector:sel]) return nil;
+    NSMethodSignature *signature = [object methodSignatureForSelector:sel];
+    if (signature.numberOfArguments != 2) return nil;
+    switch (signature.methodReturnType[0]) {
+    case '@':
+        return ((id (*)(id, SEL))objc_msgSend)(object, sel);
+    case 'q':
+    case 'l':
+        return @(((long long (*)(id, SEL))objc_msgSend)(object, sel));
+    case 'Q':
+    case 'L':
+        return @(((unsigned long long (*)(id, SEL))objc_msgSend)(object, sel));
+    case 'i':
+        return @(((int (*)(id, SEL))objc_msgSend)(object, sel));
+    case 'B':
+    case 'c':
+        return @(((BOOL (*)(id, SEL))objc_msgSend)(object, sel));
+    case 'd':
+        return @(((double (*)(id, SEL))objc_msgSend)(object, sel));
+    default:
+        return nil;
+    }
+}
+
 BOOL OhrtCallBool(id object, NSString *selector) {
     SEL sel = NSSelectorFromString(selector);
     if (!object || ![object respondsToSelector:sel]) return NO;
@@ -84,6 +110,8 @@ static void OhrtRegisterDefaults(void) {
         kOhrtFactsKey : @YES,
         // Asked for, and it only shows a number that came with the post.
         kOhrtLikesKey : @YES,
+        // Asked for, and like the profile's it only adds a line.
+        kOhrtPostFactsKey : @YES,
     }];
 }
 
@@ -118,6 +146,7 @@ static void OhrtAppLaunching(void) {
     OhrtInstallActivity();
     OhrtInstallMessages();
     OhrtInstallLikes();
+    OhrtInstallPostFacts();
     OhrtInstallSuggested();
     OhrtInstallDMMode();
     OhrtInstallFollowing();

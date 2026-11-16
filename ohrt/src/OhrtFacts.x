@@ -56,6 +56,14 @@ static UIColor *OhrtFactsColour(void) {
     }];
 }
 
+UIFont *OhrtFactsLineFont(void) {
+    return OhrtFactsFont();
+}
+
+UIColor *OhrtFactsLineColour(void) {
+    return OhrtFactsColour();
+}
+
 static CGFloat OhrtFactsTextHeight(NSString *text, CGFloat width) {
     if (!text.length || !(width >= 40)) return 0;
     CGRect box = [text boundingRectWithSize:CGSizeMake(width, CGFLOAT_MAX)

@@ -62,6 +62,23 @@ static void time_budget(void) {
     CHECK("two ids to two numbers", OhrtIdNumber("30076214123456789012345678901234567") != OhrtIdNumber("30076214123456789012345678901234568"));
     CHECK("the number can be filed", OhrtIdNumber("mid.$cAAA") > 0 && OhrtIdNumber("") > 0 && OhrtIdNumber(NULL) > 0);
 
+    char grouped[32];
+    OhrtGroupDigits(12347, grouped, sizeof(grouped));
+    CHECK("a count in full", strcmp(grouped, "12,347") == 0);
+    OhrtGroupDigits(1234567, grouped, sizeof(grouped));
+    CHECK("a count in the millions", strcmp(grouped, "1,234,567") == 0);
+    OhrtGroupDigits(999, grouped, sizeof(grouped));
+    CHECK("a count under a thousand", strcmp(grouped, "999") == 0);
+    OhrtGroupDigits(0, grouped, sizeof(grouped));
+    CHECK("no count", strcmp(grouped, "0") == 0);
+    OhrtGroupDigits(-1000, grouped, sizeof(grouped));
+    CHECK("a count that went down", strcmp(grouped, "-1,000") == 0);
+    OhrtGroupDigits(-9223372036854775807LL - 1, grouped, sizeof(grouped));
+    CHECK("the lowest count there is", strcmp(grouped, "-9,223,372,036,854,775,808") == 0);
+    char small[6];
+    OhrtGroupDigits(1234567, small, sizeof(small));
+    CHECK("a count cut short to fit", strlen(small) == 5);
+
     CHECK("the name on its own", OhrtNameStandsAlone(' ', ' ', 'i'));
     CHECK("the name at the start and the end of a text", OhrtNameStandsAlone(' ', ' ', ' '));
     CHECK("the name before a full stop", OhrtNameStandsAlone(' ', '.', ' '));

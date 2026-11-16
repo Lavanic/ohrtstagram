@@ -26,6 +26,7 @@ FOUNDATION_EXPORT NSString *const kOhrtWordmarkKey;
 FOUNDATION_EXPORT NSString *const kOhrtNameKey;
 FOUNDATION_EXPORT NSString *const kOhrtFactsKey;
 FOUNDATION_EXPORT NSString *const kOhrtLikesKey;
+FOUNDATION_EXPORT NSString *const kOhrtPostFactsKey;
 
 FOUNDATION_EXPORT BOOL OhrtBool(NSString *key);
 
@@ -58,6 +59,12 @@ FOUNDATION_EXPORT void OhrtInstallActivity(void);
 FOUNDATION_EXPORT void OhrtInstallSuggested(void);
 FOUNDATION_EXPORT void OhrtInstallMessages(void);
 FOUNDATION_EXPORT void OhrtInstallLikes(void);
+FOUNDATION_EXPORT void OhrtInstallPostFacts(void);
+
+// The small red text of the facts lines (OhrtFacts.x), on a profile and
+// under a post.
+FOUNDATION_EXPORT UIFont *OhrtFactsLineFont(void);
+FOUNDATION_EXPORT UIColor *OhrtFactsLineColour(void);
 
 // What a feature needs from the Instagram that is running (OhrtNeeds.m).
 FOUNDATION_EXPORT NSString *OhrtMissing(NSString *feature);
@@ -127,4 +134,7 @@ FOUNDATION_EXPORT BOOL OhrtFollowingFeedEnabled(void);
 // nil or NO when the object does not respond.
 FOUNDATION_EXPORT id OhrtCall(id object, NSString *selector);
 FOUNDATION_EXPORT BOOL OhrtCallBool(id object, NSString *selector);
+// What `object` answers to `selector` as an object, whatever kind of value
+// the method returns (a number comes back as an NSNumber), or nil.
+FOUNDATION_EXPORT id OhrtCallValue(id object, NSString *selector);
 FOUNDATION_EXPORT void OhrtCallVoid(id object, NSString *selector);

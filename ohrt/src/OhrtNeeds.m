@@ -70,6 +70,20 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("likes", "IGMediaInteractionCountVisibilityHelper", "shouldHideLikeAndViewCountsForMediaUserPK:likeAndViewCountsDisabled:mediaIsInDaisy:"),
     OHRT_NEED("likes", "IGUFIInteractionCountProvider", "initWithViewModel:interactionCountVisibilityHelper:"),
 
+    OHRT_NEED("postfacts", "IGFeedItemTimelineViewModelImpl", "initWithMedia:configuration:feedConfiguration:userSession:showAYMFCellBelowHeader:showInlineComposer:showRowStyleCTA:isDelayedRowCTAVisible:showWYTSurvey:isMLEXPreview:coauthorRowType:shouldShowAdsFeedbackInterface:shouldShowAdsFeedbackInterfaceRepetition:afiInterestsPickerState:leadGenInterestPickerCellViewState:shouldShowInjectedFeedUnit:shouldShowInlineCommentPreview:shouldLogRowTypes:shouldHideHeaderRow:shouldShowOnImpressionControl:showDelaySkipAdNUX:isFloatingSocialContextDismissed:shouldExpandCTAVertically:showDelaySkipAdPersistentTombstone:shouldShowHIDEntryPoint:shouldShowChainingTopicTray:shouldShowSponsoredLabelInFooter:shouldRenderDestinationInfoAttachement:commercePageEligibleModules:"),
+    OHRT_NEED("postfacts", "IGFeedItemTimelineViewModelImpl", "rowItems"),
+    OHRT_NEED("postfacts", "IGFeedSectionControllerOld", "rowForCellAtIndex:"),
+    OHRT_NEED("postfacts", "IGFeedSectionControllerOld", "sizeForItemAtIndex:"),
+    OHRT_NEED("postfacts", "IGFeedSectionControllerOld", "cellForItemAtIndex:"),
+    OHRT_NEED("postfacts", "IGFeedSectionControllerOld", "didSelectItemAtIndex:"),
+    OHRT_NEED("postfacts", "IGFeedSectionControllerOld", "analyticsItemTypeAtIndex:"),
+    OHRT_NEED("postfacts", "IGFeedItemRow", "initWithType:textType:value:"),
+    OHRT_NEED("postfacts", "IGFeedItemRow", "type"),
+    OHRT_NEED("postfacts", "IGFeedItemRow", "textType"),
+    OHRT_NEED("postfacts", "IGFeedItemRow", "value"),
+    OHRT_NEED("postfacts", "IGFeedItemTextCell", "layoutSubviews"),
+    OHRT_NEED("postfacts", "IGListAdapter", "dequeueReusableCellOfClass:forSectionController:atIndex:"),
+
     OHRT_NEED("suggested", "IGProfileHeaderView", "objectsForListAdapter:"),
 
     OHRT_NEED("dm", "IGTabBarController", "viewWillAppear:"),
@@ -147,7 +161,7 @@ NSString *OhrtSelfCheck(void) {
     NSString *instagram = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     [report appendFormat:@"ohrtstagram %@ (%@) on Insta\u2060gram %@, iOS %@\n", OHRT_VERSION, OHRT_BUILD, instagram, [UIDevice currentDevice].systemVersion];
     [report appendFormat:@"safe mode this start: %@\n", OhrtSafeLaunch() ? @"yes" : @"no"];
-    for (NSString *feature in @[ @"start", @"wordmark", @"facts", @"activity", @"messages", @"likes", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
+    for (NSString *feature in @[ @"start", @"wordmark", @"facts", @"activity", @"messages", @"likes", @"postfacts", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
         NSString *missing = OhrtMissing(feature);
         [report appendFormat:@"%@: %@\n", feature, missing ? [@"missing " stringByAppendingString:missing] : @"ok"];
     }
