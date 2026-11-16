@@ -1,6 +1,12 @@
 // ohrtstagram's own code. Everything under ohrt/ is ours; upstream's src/ is
 // built from, not edited, so pulling its changes stays easy.
 #import <UIKit/UIKit.h>
+#import <substrate.h>
+
+// Every hook of ours goes in through OhrtHook.m, which says why. Logos
+// writes its calls under the library's name, hence the define.
+FOUNDATION_EXPORT void OhrtHookMessage(Class cls, SEL selector, IMP replacement, IMP *original);
+#define MSHookMessageEx OhrtHookMessage
 
 #define OHRT_VERSION @"0.1.0"
 
