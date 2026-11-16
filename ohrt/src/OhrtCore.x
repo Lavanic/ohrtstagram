@@ -103,6 +103,9 @@ static void OhrtWelcome(void) {
 // told, and the features that hook Instagram decide here whether to. Each
 // step only happens once however often this is called.
 static void OhrtAppLaunching(void) {
+    // Before anything is decided: a switch nobody has touched reads as its
+    // default, and one of ours defaults to on.
+    OhrtRegisterDefaults();
     OhrtGuardAppLaunching();
     OhrtInstallWordmark();
     OhrtInstallDMMode();

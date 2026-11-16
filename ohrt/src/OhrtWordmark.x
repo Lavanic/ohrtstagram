@@ -109,10 +109,18 @@ static void OhrtPutWordmark(UIView *header) {
     if (gaveUp) return;
     static Ivar ivar;
     if (!ivar) ivar = class_getInstanceVariable([header class], "_logoButton");
-    if (!ivar) return;
-    UIButton *button = object_getIvar(header, ivar);
-    if (![button isKindOfClass:[UIButton class]]) return;
+    UIButton *button = ivar ? object_getIvar(header, ivar) : nil;
+    if (![button isKindOfClass:[UIButton class]]) button = nil;
     UIImage *shown = [button imageForState:UIControlStateNormal];
+    // Once, what the header turned out to hold, for reading off the phone.
+    static BOOL described;
+    if (!described) {
+        described = YES;
+        OhrtLog(@"wordmark: the header is %@, its logo button %@, showing a picture of %@ and the title %@", NSStringFromClass([header class]),
+                button ? NSStringFromClass([button class]) : @"not found", shown ? NSStringFromCGSize(shown.size) : @"nothing",
+                [button titleForState:UIControlStateNormal] ?: @"nothing");
+    }
+    if (!button) return;
     // No picture means a title is showing in its place.
     if (!shown || objc_getAssociatedObject(shown, &kOhrtOursKey)) return;
     UIImage *ours = OhrtWordmarkLike(shown);
@@ -151,7 +159,11 @@ static void OhrtPutWordmark(UIView *header) {
 void OhrtInstallWordmark(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        if (!OhrtFeatureReady(kOhrtWordmarkKey, @"wordmark") || !OhrtWordmarkSource()) return;
+        if (!OhrtFeatureReady(kOhrtWordmarkKey, @"wordmark") || !OhrtWordmarkSource()) {
+            OhrtLog(@"wordmark: off");
+            return;
+        }
         %init(OhrtWordmark);
+        OhrtLog(@"wordmark: on");
     });
 }
