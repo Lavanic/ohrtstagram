@@ -7,10 +7,11 @@
 //
 // There are two sources, and nothing is asked of Instagram for either. The
 // first is what the app already holds when a profile opens: the id, the
-// kind of account, whether it follows you, its latest story. The second is
-// your own history with the account, which Instagram's app does not hold:
-// when each follow began, and how much you have liked, commented, watched
-// and written. Every count is of what you did, never of what they did. It
+// kind of account, whether it follows you, its latest story, and the scores
+// and flags Instagram keeps on it, each only when the server sent it. The
+// second is your own history with the account, which Instagram's app does
+// not hold: when each follow began, and how much you have liked, commented,
+// watched and written. Every count is of what you did, never of what they did. It
 // comes from your Instagram export (OhrtExport.m) up to the day that was
 // made, and from our own notes of what you have done in this app since
 // (OhrtActivity.x). Stories watched come from our notes alone: the export
@@ -205,6 +206,104 @@ static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString 
     }
 }
 
+// A value Instagram's servers name things by, as words on one line.
+static NSString *OhrtFactsWords(id value) {
+    if ([value isKindOfClass:[NSNumber class]]) return [value stringValue];
+    if (![value isKindOfClass:[NSString class]]) return nil;
+    NSString *text = [[[value lowercaseString] componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"_,\n\r"]] componentsJoinedByString:@" "];
+    text = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    if (text.length > 40) text = [text substringToIndex:40];
+    return text.length ? text : nil;
+}
+
+static BOOL OhrtFactsTrue(id value) {
+    return [value isKindOfClass:[NSNumber class]] && [value boolValue];
+}
+
+static NSString *OhrtFactsScore(NSString *label, id value) {
+    if (![value isKindOfClass:[NSNumber class]] || [value doubleValue] == 0) return nil;
+    return [NSString stringWithFormat:fabs([value doubleValue]) >= 0.005 ? @"%@ %.2f" : @"%@ %.2g", label, [value doubleValue]];
+}
+
+// Which of these came with the first few profiles, by field name only.
+static void OhrtFactsSayFields(NSString *pk, NSArray<NSString *> *fields) {
+    static NSMutableSet<NSString *> *told;
+    if (!told) told = [NSMutableSet set];
+    if (told.count >= 8 || [told containsObject:pk]) return;
+    [told addObject:pk];
+    OhrtLog(@"facts: a profile came with %@", fields.count ? [fields componentsJoinedByString:@" "] : @"none of the score and flag fields");
+}
+
+// What Instagram itself holds about an account that is not your own and
+// does not show: how close it reckons you are, what it has flagged, where
+// it places the account. Each is shown under the server's own name for it,
+// since what goes into a score is not known here.
+static void OhrtAddScores(NSMutableArray<NSString *> *facts, id user, NSString *pk) {
+    NSMutableArray<NSString *> *fields = [NSMutableArray array];
+
+    // -[IGUser bffScore] is this same number.
+    NSString *closeness = OhrtFactsScore(@"closeness", OhrtCallValue(user, @"closenessScore"));
+    if (closeness) {
+        [fields addObject:@"closeness_score"];
+        [facts addObject:closeness];
+    }
+    NSString *coeff = OhrtFactsScore(@"coeff weight", OhrtCallValue(user, @"coeffWeight"));
+    if (coeff) {
+        [fields addObject:@"coeff_weight"];
+        [facts addObject:coeff];
+    }
+
+    id scammer = OhrtCallValue(user, @"isPossibleScammer");
+    if (scammer) [fields addObject:@"is_possible_scammer"];
+    id actor = OhrtCallValue(user, @"isPossibleBadActor");
+    if (actor) [fields addObject:@"is_possible_bad_actor"];
+    if (OhrtFactsTrue(scammer) || OhrtFactsTrue(OhrtCallValue(actor, @"isPossibleScammer"))) [facts addObject:@"flagged possible scammer"];
+    if (OhrtFactsTrue(OhrtCallValue(actor, @"isPossibleImpersonator"))) [facts addObject:@"flagged possible impersonator"];
+
+    id warning = OhrtCallValue(user, @"accountWarning");
+    if (warning) {
+        id harm = OhrtCallValue(warning, @"harmType");
+        [fields addObject:[NSString stringWithFormat:@"account_warning(harm_type %@)", [harm isKindOfClass:[NSString class]] ? @"text" : [harm isKindOfClass:[NSNumber class]] ? @"number" : @"none"]];
+        NSString *kind = OhrtFactsWords(harm);
+        [facts addObject:kind ? [@"account warning " stringByAppendingString:kind] : @"account warning"];
+    }
+
+    id tools = OhrtCallValue(user, @"profilePicGenaiToolInfo");
+    if ([tools isKindOfClass:[NSArray class]] && [tools count]) {
+        [fields addObject:@"profile_pic_genai_tool_info"];
+        // The tool's name only: the entry also holds what was typed to make
+        // the picture.
+        id tool = [tools firstObject];
+        NSString *name = OhrtFactsWords(OhrtCallValue(tool, @"displayName")) ?: OhrtFactsWords(OhrtCallValue(tool, @"toolType"));
+        [facts addObject:name ? [NSString stringWithFormat:@"ai-made picture (%@)", name] : @"ai-made picture"];
+    }
+
+    // Sent about someone asking to follow a supervised account, as far as
+    // is known, so it is rare.
+    id country = OhrtCallValue(OhrtCallValue(user, @"ukTeenOsaConnectionInfo"), @"requesterBasedInCountry");
+    if ([country isKindOfClass:[NSString class]] && [country length] && [country length] <= 60) {
+        [fields addObject:@"uk_teen_osa_connection_info"];
+        [facts addObject:[@"based in " stringByAppendingString:country]];
+    }
+    id home = OhrtCallValue(user, @"homeCountry");
+    if ([home isKindOfClass:[NSString class]] && [home length] && [home length] <= 60) {
+        [fields addObject:@"home_country"];
+        [facts addObject:[@"home country " stringByAppendingString:home]];
+    }
+
+    if ([OhrtCallValue(user, @"reelMediaSeenTimestamp") isKindOfClass:[NSNumber class]]) [fields addObject:@"reel_media_seen_timestamp"];
+    OhrtFactsSayFields(pk, fields);
+}
+
+// When you last watched a story of theirs, as Instagram keeps it.
+static NSString *OhrtFactsWatched(id user) {
+    id stamp = OhrtCallValue(user, @"reelMediaSeenTimestamp");
+    double seconds = [stamp isKindOfClass:[NSNumber class]] ? [stamp doubleValue] : 0;
+    while (seconds > 1e11) seconds /= 1000.0;
+    if (seconds < 1262304000 || seconds > [NSDate date].timeIntervalSince1970 + 86400) return nil;
+    return [@"watched their story " stringByAppendingString:OhrtDay([NSDate dateWithTimeIntervalSince1970:seconds])];
+}
+
 static NSString *OhrtFactsText(id user) {
     NSString *pk = OhrtText(OhrtCall(user, @"pk"));
     if (!pk.length) return nil;
@@ -239,7 +338,11 @@ static NSString *OhrtFactsText(id user) {
     [facts addObjectsFromArray:OhrtLookedChanges(user, pk)];
 
     NSString *account = OhrtMyAccount();
-    if (account.length && ![account isEqualToString:pk]) OhrtAddHistory(facts, user, pk);
+    BOOL other = account.length && ![account isEqualToString:pk];
+    if (other) {
+        OhrtAddHistory(facts, user, pk);
+        OhrtAddScores(facts, user, pk);
+    }
 
     NSDate *story = OhrtDate(OhrtCall(user, @"latestReelMediaDate"));
     NSTimeInterval age = story ? -story.timeIntervalSinceNow : -1;
@@ -248,6 +351,8 @@ static NSString *OhrtFactsText(id user) {
         OhrtAgoText(age, ago, sizeof(ago));
         [facts addObject:[@"story " stringByAppendingString:@(ago)]];
     }
+    NSString *watched = other ? OhrtFactsWatched(user) : nil;
+    if (watched) [facts addObject:watched];
     return [facts componentsJoinedByString:@", "];
 }
 
