@@ -26,6 +26,7 @@ FOUNDATION_EXPORT BOOL OhrtBool(NSString *key);
 // The launch guard (OhrtGuard.m). OhrtFeature is a switch that also reads
 // as off in safe mode.
 FOUNDATION_EXPORT BOOL OhrtSafeLaunch(void);
+FOUNDATION_EXPORT BOOL OhrtSafeForced(void);
 FOUNDATION_EXPORT BOOL OhrtFeature(NSString *key);
 FOUNDATION_EXPORT void OhrtLaunchSettled(void);
 FOUNDATION_EXPORT BOOL OhrtTry(NSString *feature, void (NS_NOESCAPE ^piece)(void));

@@ -163,6 +163,14 @@ __attribute__((constructor)) static void OhrtCoreLoad(void) {
 // borrows upstream's own switch for hiding the feed tab, as long as this
 // Instagram has what DM mode needs to land on the inbox.
 + (BOOL)getBoolPref:(NSString *)key {
+    // Instagram's own answer to a few crashes in a row is to erase its
+    // data: the login, the preferences, and with them every switch here and
+    // the launch guard's count. Upstream has a switch against that. It is
+    // asked for after crashes, which is exactly when our safe mode is on,
+    // and reading it as off then would let Instagram erase the settings
+    // that safe mode says are kept. So safe mode after crashes leaves this
+    // one switch alone. "Start with everything off" still turns it off.
+    if ([key isEqualToString:@"disable_safe_mode"] && !OhrtSafeForced()) return %orig;
     if (OhrtSafeLaunch()) return NO;
     if ([key isEqualToString:@"hide_feed_tab"] && OhrtBool(kOhrtDMModeKey)) {
         static BOOL available;

@@ -5,7 +5,9 @@
 // is counted until the app has settled. After two in a row that did not,
 // the next one runs with every switch read as off, ours and upstream's,
 // which leaves plain Instagram with the settings page still reachable, and
-// says what happened. The stored settings are not touched.
+// says what happened. The stored settings are not touched. (One switch is
+// not read as off: the one against Instagram erasing its own data after
+// crashes. OhrtCore.x says why.)
 //
 // The counting is in OhrtLogic.h, where it is tested. This file feeds it
 // the app's events and keeps its one number between runs.
@@ -77,6 +79,14 @@ BOOL OhrtSafeLaunch(void) {
         if (gOhrtForced) OhrtLog(@"guard: started with every switch off, as set in the Settings app");
     }
     return gOhrtGuard.safe || gOhrtForced;
+}
+
+// Whether this start has every switch off because the Settings app says so,
+// not because of crashes.
+BOOL OhrtSafeForced(void) {
+    if (OhrtPrewarmed() && !gOhrtLaunching) return [[NSUserDefaults standardUserDefaults] boolForKey:kOhrtForceSafeKey];
+    OhrtSafeLaunch();
+    return gOhrtForced;
 }
 
 BOOL OhrtFeature(NSString *key) {
