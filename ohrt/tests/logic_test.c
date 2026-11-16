@@ -33,6 +33,18 @@ static void time_budget(void) {
     CHECK("a clock that went backwards counts nothing", OhrtCountedTime(-4, 5) == 0);
     CHECK("not a number counts nothing", OhrtCountedTime(NAN, 5) == 0);
 
+    CHECK("the name on its own", OhrtNameStandsAlone(' ', ' ', 'i'));
+    CHECK("the name at the start and the end of a text", OhrtNameStandsAlone(' ', ' ', ' '));
+    CHECK("the name before a full stop", OhrtNameStandsAlone(' ', '.', ' '));
+    CHECK("the name with a possessive", OhrtNameStandsAlone(' ', '\'', 's'));
+    CHECK("the name in quotes", OhrtNameStandsAlone('"', '"', ' '));
+    CHECK("an address is not the name", !OhrtNameStandsAlone(' ', '.', 'c'));
+    CHECK("a handle is not the name", !OhrtNameStandsAlone('@', ' ', ' '));
+    CHECK("a path is not the name", !OhrtNameStandsAlone('/', '/', 'p'));
+    CHECK("the end of an address is not the name", !OhrtNameStandsAlone('.', ' ', ' '));
+    CHECK("a longer word is not the name", !OhrtNameStandsAlone(' ', 'm', 'e'));
+    CHECK("the end of a longer word is not the name", !OhrtNameStandsAlone('y', ' ', ' '));
+
     CHECK("no budget never locks", !OhrtOverBudget(999999, 0, 0));
     CHECK("under budget", !OhrtOverBudget(29 * 60, 30, 0));
     CHECK("at budget", OhrtOverBudget(30 * 60, 30, 0));

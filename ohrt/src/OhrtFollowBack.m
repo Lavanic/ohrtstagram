@@ -370,7 +370,7 @@ static NSString *OhrtSessionAccount(id session) {
     if ([self availableAt]) return;
     NSString *missing = OhrtMissing(@"followback");
     if (missing) {
-        [self stopWithNote:[NSString stringWithFormat:@"This Instagram version does not have what the check was written for (%@).", missing]];
+        [self stopWithNote:[NSString stringWithFormat:@"This Insta\u2060gram version does not have what the check was written for (%@).", missing]];
         return;
     }
     self.followers = nil;
@@ -386,7 +386,7 @@ static NSString *OhrtSessionAccount(id session) {
             [self readList:@"following" then:^(NSDictionary *following) {
                 if (!OhrtTry(@"follow back", ^{
                         [self finishWithFollowing:following];
-                    })) [self stopWithNote:@"The check could not finish on this Instagram version."];
+                    })) [self stopWithNote:@"The check could not finish on this Insta\u2060gram version."];
             }];
         });
     }];
@@ -429,7 +429,7 @@ static NSString *OhrtSessionAccount(id session) {
         started = [scan startWithSession:session path:path identifier:identifier];
     });
     if (!started) {
-        [self stopWithNote:@"This Instagram version does not have the list reader this check was written for."];
+        [self stopWithNote:@"This Insta\u2060gram version does not have the list reader this check was written for."];
         return;
     }
     [self changed];
@@ -445,7 +445,7 @@ static NSString *OhrtSessionAccount(id session) {
     [defaults setInteger:failures forKey:OhrtKey(@"failures", self.account)];
     [defaults setDouble:[NSDate date].timeIntervalSince1970 + hours * 3600 forKey:OhrtKey(@"cooldown_until", self.account)];
     OhrtLog(@"follow back: refused, next check in %.0f hours", hours);
-    [self stopWithNote:[NSString stringWithFormat:@"Instagram stopped answering part way through. That is usually its rate limit, so the next check waits %.0f hours.", hours]];
+    [self stopWithNote:[NSString stringWithFormat:@"Insta\u2060gram stopped answering part way through. That is usually its rate limit, so the next check waits %.0f hours.", hours]];
 }
 
 static long OhrtCount(id boxed) {
@@ -478,7 +478,7 @@ static long OhrtCount(id boxed) {
     long expected = sameAccount ? OhrtCount(OhrtCall(OhrtCall(session, @"user"), @"followerCount")) : 0;
     NSMutableString *note = [NSMutableString stringWithFormat:@"Read %lu followers and %lu following.", (unsigned long)self.followers.count, (unsigned long)following.count];
     if (OhrtListLooksShort((long)self.followers.count, expected)) {
-        [note appendFormat:@" Instagram counts %ld followers, so the list came back short and some accounts below may follow you after all.", expected];
+        [note appendFormat:@" Insta\u2060gram counts %ld followers, so the list came back short and some accounts below may follow you after all.", expected];
     }
     OhrtLog(@"follow back: done, %lu followers, %lu following, %lu not following back", (unsigned long)self.followers.count, (unsigned long)following.count, (unsigned long)accounts.count);
 
@@ -581,7 +581,7 @@ static long OhrtCount(id boxed) {
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == 0) return @"Reads your followers and who you follow, slowly, with Instagram's own list reader. It takes a few minutes.";
+    if (section == 0) return @"Reads your followers and who you follow, slowly, with Insta\u2060gram's own list reader. It takes a few minutes.";
     return [OhrtFollowBack shared].accounts.count ? @"Tap an account to open its profile." : nil;
 }
 
@@ -722,7 +722,7 @@ static NSInteger OhrtFollowStatus(id user) {
 
 - (void)couldNotUnfollow:(NSString *)account {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Not confirmed"
-                                                                   message:@"Instagram did not report the unfollow going through. Open the profile to check, and unfollow there if it did not."
+                                                                   message:@"Insta\u2060gram did not report the unfollow going through. Open the profile to check, and unfollow there if it did not."
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];

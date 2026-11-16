@@ -76,9 +76,10 @@ static void OhrtRegisterDefaults(void) {
         kOhrtDMModeKey : @NO,
         kOhrtFollowingFeedKey : @NO,
         kOhrtWallKey : @NO,
-        // The one of ours that starts on: it is the app's name, like the
-        // icon. The launch guard still turns it off with the rest.
+        // The two of ours that start on: they are the app's name, like the
+        // icon. The launch guard still turns them off with the rest.
         kOhrtWordmarkKey : @YES,
+        kOhrtNameKey : @YES,
     }];
 }
 
@@ -108,6 +109,7 @@ static void OhrtAppLaunching(void) {
     OhrtRegisterDefaults();
     OhrtGuardAppLaunching();
     OhrtInstallBrand();
+    OhrtInstallName();
     OhrtInstallDMMode();
     OhrtInstallFollowing();
     OhrtInstallWall();

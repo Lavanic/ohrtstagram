@@ -9,6 +9,10 @@ FOUNDATION_EXPORT void OhrtHookMessage(Class cls, SEL selector, IMP replacement,
 #define MSHookMessageEx OhrtHookMessage
 
 #define OHRT_VERSION @"0.1.0"
+
+// Where our own screens mean Instagram itself, they write the word with a
+// word joiner in the middle: "Insta\u2060gram". It shows as nothing, and it
+// keeps the name feature (OhrtName.x) from turning the word into ours.
 // OHRT_BUILD, the commit this was built from. Written by ohrt/build.sh.
 #import "OhrtBuild.h"
 
@@ -19,6 +23,7 @@ FOUNDATION_EXPORT NSString *const kOhrtDMModeKey;
 FOUNDATION_EXPORT NSString *const kOhrtFollowingFeedKey;
 FOUNDATION_EXPORT NSString *const kOhrtWallKey;
 FOUNDATION_EXPORT NSString *const kOhrtWordmarkKey;
+FOUNDATION_EXPORT NSString *const kOhrtNameKey;
 
 FOUNDATION_EXPORT BOOL OhrtBool(NSString *key);
 
@@ -45,6 +50,7 @@ FOUNDATION_EXPORT void OhrtInstallDMMode(void);
 FOUNDATION_EXPORT void OhrtInstallFollowing(void);
 FOUNDATION_EXPORT void OhrtInstallWall(void);
 FOUNDATION_EXPORT void OhrtInstallBrand(void);
+FOUNDATION_EXPORT void OhrtInstallName(void);
 
 // What a feature needs from the Instagram that is running (OhrtNeeds.m).
 FOUNDATION_EXPORT NSString *OhrtMissing(NSString *feature);

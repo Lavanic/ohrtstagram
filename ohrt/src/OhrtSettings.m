@@ -48,6 +48,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         ], nil),
         OhrtSection(@"Look", @[
             OhrtRestartSwitch(@"ohrtstagram marks", @"Our wordmark at the top of the home feed and our mark on the login screen", kOhrtWordmarkKey),
+            OhrtRestartSwitch(@"ohrtstagram in text", @"Buttons, titles and menus say ohrtstagram", kOhrtNameKey),
             OhrtSwitch(@"Grayscale", @"Shows the whole app in grey", kOhrtGrayscaleKey),
         ], nil),
     ];
@@ -64,7 +65,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
                              viewController:OhrtFollowBackScreen()],
     ], nil)];
 
-    [sections addObject:OhrtSection(@"Instagram", @[
+    [sections addObject:OhrtSection(@"Insta\u2060gram", @[
         OhrtPage(@"General", @"gear", @[
             OhrtSection(nil, @[
                 OhrtSwitch(@"Hide ads", @"Removes ads from the feed, stories and search", @"hide_ads"),
@@ -72,7 +73,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
                 OhrtSwitch(@"Copy description", @"Hold a caption or bio to copy it", @"copy_description"),
                 OhrtSwitch(@"Do not save recent searches", @"Search bars stop remembering what you looked for", @"no_recent_searches"),
                 OhrtSwitch(@"Detailed color picker", @"Hold the eyedropper in the story editor for any colour", @"detailed_color_picker"),
-                OhrtRestartSwitch(@"Liquid glass buttons", @"Instagram's experimental glass buttons", @"liquid_glass_buttons"),
+                OhrtRestartSwitch(@"Liquid glass buttons", @"Insta\u2060gram's experimental glass buttons", @"liquid_glass_buttons"),
                 OhrtRestartSwitch(@"Liquid glass surfaces", @"The same for menus and other surfaces", @"liquid_glass_surfaces"),
             ], nil),
             OhrtSection(@"Notes", @[
@@ -178,21 +179,21 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
     }
     [debug addObject:OhrtSection(nil, @[
         OhrtRestartSwitch(@"Settings from the home tab", @"Hold the home tab to open these settings", @"settings_shortcut"),
-        OhrtSwitch(@"Disable safe mode", @"Instagram stops resetting itself after repeated crashes", @"disable_safe_mode"),
+        OhrtSwitch(@"Disable safe mode", @"Insta\u2060gram stops resetting itself after repeated crashes", @"disable_safe_mode"),
     ], nil)];
     [debug addObject:OhrtSection(@"Self-check", @[
-        [SCISetting staticCellWithTitle:@"This Instagram" subtitle:OhrtSelfCheck() icon:nil],
+        [SCISetting staticCellWithTitle:@"This Insta\u2060gram" subtitle:OhrtSelfCheck() icon:nil],
         [SCISetting buttonCellWithTitle:@"Copy" subtitle:@"" icon:nil action:^{
             [UIPasteboard generalPasteboard].string = OhrtSelfCheck();
         }],
-    ], @"What each ohrtstagram feature needs from Instagram, looked up in the app that is running.")];
+    ], @"What each ohrtstagram feature needs from Insta\u2060gram, looked up in the app that is running.")];
     [sections addObject:OhrtSection(nil, @[ OhrtPage(@"Debug", @"ladybug", debug) ], nil)];
 
     [sections addObject:OhrtSection(@"About", @[
         [SCISetting linkCellWithTitle:@"SCInsta" subtitle:@"The tweak this is built on, by SoCuul"
                                  icon:[SCISymbol symbolWithName:@"chevron.left.forwardslash.chevron.right"]
                                   url:@"https://github.com/SoCuul/SCInsta"],
-    ], [NSString stringWithFormat:@"ohrtstagram %@, a modified SCInsta %@, on Instagram %@.\nFree software under the GNU GPL, version 3.",
+    ], [NSString stringWithFormat:@"ohrtstagram %@, a modified SCInsta %@, on Insta\u2060gram %@.\nFree software under the GNU GPL, version 3.",
                                   OHRT_VERSION, SCIVersionString, [SCIUtils IGVersionString]])];
 
     return sections;

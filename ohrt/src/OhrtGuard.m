@@ -141,8 +141,8 @@ static void OhrtSaySafe(void) {
     if (!top) return;
     NSString *way = @"on your profile, hold the three lines at the top right, or hold four fingers anywhere";
     NSString *message = gOhrtForced
-        ? [NSString stringWithFormat:@"\"Start with everything off\" is switched on for ohrtstagram in the Settings app, so this is plain Instagram. Your settings are kept. Change what you need to (%@), switch it off again in Settings, then restart.", way]
-        : [NSString stringWithFormat:@"The last two starts ended before the app settled, so this one is plain Instagram. Your settings are kept. Turn off what you changed last (%@), then restart.", way];
+        ? [NSString stringWithFormat:@"\"Start with everything off\" is switched on for ohrtstagram in the Settings app, so this is plain Insta\u2060gram. Your settings are kept. Change what you need to (%@), switch it off again in Settings, then restart.", way]
+        : [NSString stringWithFormat:@"The last two starts ended before the app settled, so this one is plain Insta\u2060gram. Your settings are kept. Turn off what you changed last (%@), then restart.", way];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"ohrtstagram is running with its changes off"
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];

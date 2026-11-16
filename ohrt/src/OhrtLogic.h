@@ -42,6 +42,23 @@ static inline double OhrtAllowedAfterMore(double spentSeconds, long step) {
     return (spentSeconds > 0 ? spentSeconds : 0) + (double)step * 60.0;
 }
 
+// The app's name in its text
+//
+// Whether "Instagram", found in a piece of text, stands there as the app's
+// name, given the character before it and the two after it (a space where
+// there is none). It does not when it is part of a longer word, of an
+// address ("Instagram.com") or of a handle or path ("@Instagram").
+static inline int OhrtIsLetterOrDigit(unsigned c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+}
+
+static inline int OhrtNameStandsAlone(unsigned before, unsigned after, unsigned next) {
+    if (OhrtIsLetterOrDigit(before) || before == '@' || before == '/' || before == '.') return 0;
+    if (OhrtIsLetterOrDigit(after)) return 0;
+    if (after == '.' && OhrtIsLetterOrDigit(next)) return 0;
+    return 1;
+}
+
 // Caught up wall
 
 typedef enum {
