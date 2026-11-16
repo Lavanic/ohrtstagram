@@ -82,6 +82,8 @@ static void OhrtRegisterDefaults(void) {
         kOhrtNameKey : @YES,
         // Asked for, and it only adds a line to a screen.
         kOhrtFactsKey : @YES,
+        // Asked for, and it only shows a number that came with the post.
+        kOhrtLikesKey : @YES,
     }];
 }
 
@@ -115,6 +117,7 @@ static void OhrtAppLaunching(void) {
     OhrtInstallFacts();
     OhrtInstallActivity();
     OhrtInstallMessages();
+    OhrtInstallLikes();
     OhrtInstallSuggested();
     OhrtInstallDMMode();
     OhrtInstallFollowing();
