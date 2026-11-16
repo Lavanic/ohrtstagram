@@ -57,6 +57,8 @@ static BOOL gOhrtLooksUnsaved;
 // What each profile was like before this run first showed it.
 static NSMutableDictionary<NSString *, id> *gOhrtLooksBefore;
 
+static void OhrtLooksSave(void);
+
 static NSMutableDictionary *OhrtLookDeepCopy(NSDictionary *person) {
     NSMutableDictionary *copy = [NSMutableDictionary dictionary];
     for (NSString *key in person) {
@@ -72,6 +74,12 @@ static NSMutableDictionary<NSString *, NSMutableDictionary *> *OhrtLooks(void) {
     NSString *account = OhrtLookAccount();
     if (!account.length) return nil;
     if (gOhrtLooks && [gOhrtLooksAccount isEqualToString:account]) return gOhrtLooks;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationWillResignActiveNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
+            OhrtLooksSave();
+        }];
+    });
     gOhrtLooksAccount = [account copy];
     gOhrtLooks = [NSMutableDictionary dictionary];
     gOhrtLooksBefore = [NSMutableDictionary dictionary];
@@ -83,6 +91,7 @@ static NSMutableDictionary<NSString *, NSMutableDictionary *> *OhrtLooks(void) {
     return gOhrtLooks;
 }
 
+// The notes are made into a file here and written off the main thread.
 static void OhrtLooksSave(void) {
     if (!gOhrtLooksUnsaved || !gOhrtLooks || !gOhrtLooksAccount.length) return;
     gOhrtLooksUnsaved = NO;
@@ -92,9 +101,13 @@ static void OhrtLooksSave(void) {
         }];
         [gOhrtLooks removeObjectsForKeys:[oldest subarrayWithRange:NSMakeRange(0, gOhrtLooks.count - kOhrtLookPeopleKept)]];
     }
+    NSData *data = [NSPropertyListSerialization dataWithPropertyList:gOhrtLooks format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
     NSString *path = OhrtLookPath(gOhrtLooksAccount);
-    [[NSFileManager defaultManager] createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
-    if (![gOhrtLooks writeToFile:path atomically:YES]) OhrtLog(@"looks: the notes could not be written");
+    if (!data) return;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        [[NSFileManager defaultManager] createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+        if (![data writeToFile:path atomically:YES]) OhrtLog(@"looks: the notes could not be written");
+    });
 }
 
 static void OhrtLooksChanged(void) {
@@ -162,6 +175,7 @@ NSArray<NSString *> *OhrtLookedChanges(id user, NSString *pk) {
     NSMutableDictionary *at = [person[kOhrtLookAt] isKindOfClass:[NSMutableDictionary class]] ? person[kOhrtLookAt] : (person[kOhrtLookAt] = [NSMutableDictionary dictionary]);
     NSMutableArray *changes = [person[kOhrtLookChanges] isKindOfClass:[NSMutableArray class]] ? person[kOhrtLookChanges] : (person[kOhrtLookChanges] = [NSMutableArray array]);
 
+    BOOL changed = NO;
     // Note what the profile says now, once it has loaded: an account seen
     // only in passing comes without its counts, and with a privacy that is
     // not to be trusted.
@@ -177,10 +191,13 @@ NSArray<NSString *> *OhrtLookedChanges(id user, NSString *pk) {
             if (changes.count > kOhrtLookChangesKept) [changes removeObjectsInRange:NSMakeRange(0, changes.count - kOhrtLookChangesKept)];
             OhrtLog(@"looks: a profile's %@ changed since it was last opened", field[0]);
         }
+        if (![values[field[0]] isEqual:value]) changed = YES;
         values[field[0]] = value;
         at[field[0]] = now;
     }
-    if (current.count) {
+    // The file is written for a change, and otherwise at most hourly for
+    // the times: the header is drawn many times a visit.
+    if (current.count && (changed || now.doubleValue - [person[kOhrtLookSeen] doubleValue] > 3600)) {
         person[kOhrtLookSeen] = now;
         OhrtLooksChanged();
     }
@@ -213,8 +230,4 @@ NSArray<NSString *> *OhrtLookedChanges(id user, NSString *pk) {
         if (text) [facts addObject:text];
     }
     return facts;
-}
-
-void OhrtLooksSaveNow(void) {
-    OhrtLooksSave();
 }
