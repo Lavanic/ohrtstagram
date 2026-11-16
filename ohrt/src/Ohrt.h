@@ -53,6 +53,7 @@ FOUNDATION_EXPORT void OhrtInstallWall(void);
 FOUNDATION_EXPORT void OhrtInstallBrand(void);
 FOUNDATION_EXPORT void OhrtInstallName(void);
 FOUNDATION_EXPORT void OhrtInstallFacts(void);
+FOUNDATION_EXPORT void OhrtInstallSuggested(void);
 
 // What a feature needs from the Instagram that is running (OhrtNeeds.m).
 FOUNDATION_EXPORT NSString *OhrtMissing(NSString *feature);

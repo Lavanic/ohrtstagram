@@ -58,6 +58,8 @@ FACTS = [
      ["class IGProfileBioCell", "ivar _bioCell"]),
     ("profile facts", "-[IGProfileBioCell layoutSubviews]",
      ["ivar _bioView"]),
+    ("no gap for suggested accounts", "-[IGProfileHeaderView objectsForListAdapter:]",
+     ["ivar _dataSource", "[... objectsForProfileHeader]"]),
     ("follow back", "-[IGTaggingViewController viewDidLoad]",
      ['@"/friendships/%@/followers/"', "[... initWithUserSession:fetchPath:endpointLoggingIdentifier:]"]),
     ("follow back", "-[IGUserListNetworkDataSource initWithUserSession:fetchPath:endpointLoggingIdentifier:]",

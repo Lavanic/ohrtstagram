@@ -49,6 +49,8 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("facts", "IGUser", "followsCurrentUser"),
     OHRT_NEED("facts", "IGUser", "followedByCurrentUser"),
 
+    OHRT_NEED("suggested", "IGProfileHeaderView", "objectsForListAdapter:"),
+
     OHRT_NEED("dm", "IGTabBarController", "viewWillAppear:"),
     OHRT_NEED("dm", "IGTabBarController", "_tabBarHasDirectInbox"),
     OHRT_NEED("dm", "IGTabBarController", "_directInboxButtonPressed"),
