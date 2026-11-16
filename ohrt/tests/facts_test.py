@@ -58,6 +58,8 @@ FACTS = [
      ["[... isLike]", '@"_unlike"']),
     ("keeping count", "-[IGStoryViewerViewController fullscreenSectionController:didMarkItemAsSeen:]",
      ["[... mediaID]", "[... addSeenDateForStoryItem:reelPK:]"]),
+    ("keeping count", "-[IGStoryLikesInteractionControllingImpl _sendStoryLikeWithLikeButton:]",
+     ["[... _isLikeableStory]", "[... isSelected]", "[... setSelected:]", "[... storyItem]", "class IGPendingStoryLike"]),
     ("keeping count", "-[IGRankingPrefetchPredictService initWithUserSession:]",
      ["[... friendStatusChangedAnnouncer]", "[... addListener:]"]),
     ("keeping count", "-[IGRankingPrefetchPredictService friendStatusChangedForUser:withUserAction:]",

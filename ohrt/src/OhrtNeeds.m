@@ -51,6 +51,7 @@ static const OhrtNeed kOhrtNeeds[] = {
 
     OHRT_NEED("activity", "IGMedia", "performLike:userInfo:navState:analyticsModule:requestSourceParams:userSession:sponsoredSupportConfiguration:completion:"),
     OHRT_NEED("activity", "IGStoryViewerViewController", "fullscreenSectionController:didMarkItemAsSeen:"),
+    OHRT_NEED("activity", "IGStoryLikesInteractionControllingImpl", "_sendStoryLikeWithLikeButton:"),
     OHRT_NEED("activity", "IGUserSession", "friendStatusChangedAnnouncer"),
     OHRT_NEED("activity", "IGUserSession", "commentPostedAnnouncer"),
     OHRT_NEED("activity", "IGUserSession", "saveStatusAnnouncer"),

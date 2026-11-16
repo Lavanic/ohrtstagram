@@ -7,8 +7,9 @@
 // not matter which button or gesture did them:
 //  - a follow or unfollow, a comment and a save are announced on the
 //    session to whoever has asked to hear;
-//  - every like goes through one method on the post;
-//  - a story counts as seen where the story viewer marks it seen.
+//  - every like of a post goes through one method on the post;
+//  - a story counts as seen where the story viewer marks it seen, and as
+//    liked where the viewer sends the like.
 // Messages are not noted: the export counts both directions, and what
 // arrives would have to be counted as well as what is sent.
 //
@@ -32,6 +33,14 @@ static const long long kOhrtFollowAction = 0;
 
 @interface IGStoryViewerViewController : UIViewController
 @end
+
+@interface IGStoryLikesInteractionControllingImpl : NSObject
+@end
+
+static id OhrtActivityIvar(id object, const char *name) {
+    Ivar ivar = object ? class_getInstanceVariable([object class], name) : NULL;
+    return ivar ? object_getIvar(object, ivar) : nil;
+}
 
 static NSString *OhrtActivityText(id value) {
     if ([value isKindOfClass:[NSString class]]) return value;
@@ -244,6 +253,21 @@ static void OhrtListen(void) {
     if (seen.count > 4000) [seen removeAllObjects];
     [seen addObject:media];
     OhrtNote(@"stories_seen", OhrtCall(item, @"user"), YES);
+}
+%end
+
+%hook IGStoryLikesInteractionControllingImpl
+- (void)_sendStoryLikeWithLikeButton:(UIButton *)button {
+    // The heart is the like: Instagram turns it on or off here and sends
+    // which. A story that cannot be liked leaves it as it was.
+    BOOL isButton = [button isKindOfClass:[UIControl class]];
+    BOOL before = isButton && button.selected;
+    %orig;
+    BOOL after = isButton && button.selected;
+    if (!isButton || before == after) return;
+    id item = OhrtCall(OhrtActivityIvar(self, "_storyItemContext"), @"storyItem");
+    id owner = OhrtCall(OhrtCall(item, @"media"), @"user") ?: OhrtCall(item, @"user");
+    OhrtNote(@"story_likes", owner, after);
 }
 %end
 
