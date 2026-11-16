@@ -92,6 +92,9 @@ FOUNDATION_EXPORT id OhrtCurrentSession(void);
 // an account by username, and about a conversation by the other's name.
 FOUNDATION_EXPORT NSDictionary *OhrtExportPerson(NSString *username);
 FOUNDATION_EXPORT NSDictionary *OhrtExportThread(NSString *fullName);
+// Reads an unpacked export folder into the same shape as a facts file, or
+// nil if the folder is not one. Slow: not for the main thread.
+FOUNDATION_EXPORT NSDictionary *OhrtReadExportFolder(NSURL *folder);
 FOUNDATION_EXPORT NSTimeInterval OhrtExportDate(void);
 FOUNDATION_EXPORT NSString *OhrtExportStatus(void);
 FOUNDATION_EXPORT void OhrtExportImport(void);

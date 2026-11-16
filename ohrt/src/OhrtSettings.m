@@ -49,7 +49,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         OhrtSection(@"Profiles", @[
             OhrtRestartSwitch(@"Facts on a profile", @"Above a profile's buttons: the account's id and kind, and your history with it", kOhrtFactsKey),
             [SCISetting staticCellWithTitle:@"Your export" subtitle:OhrtExportStatus() icon:nil],
-            [SCISetting buttonCellWithTitle:@"Read in an export" subtitle:@"The facts file that ohrt/tools/export.py makes from it" icon:nil action:^{
+            [SCISetting buttonCellWithTitle:@"Read in an export" subtitle:@"Unpack its zip in Files, then pick the folder" icon:nil action:^{
                 OhrtExportImport();
             }],
         ], @"What an account is comes from the app as its profile opens. When you followed each other and how much you have liked, watched and written "

@@ -1,9 +1,10 @@
 // What your Instagram export says about each account: when you followed
 // it and it you, and how much you have liked, commented, watched and
-// written. Instagram's app does not hold any of that, so it is read in from
-// a file: ohrt/tools/export.py makes one from an export on a computer, and
-// it is picked here from the Files app. It holds dates and counts only, and
-// it stays in the app's own folder on this phone.
+// written. Instagram's app does not hold any of that, so it is read in:
+// either the unpacked export itself, picked as a folder in the Files app
+// and read here (OhrtExportReader.m), or the one file ohrt/tools/export.py
+// makes from it on a computer. What is kept is dates and counts only, in
+// the app's own folder on this phone.
 //
 // The file belongs to one account, and is kept and looked up under the
 // account that is signed in.
@@ -89,16 +90,16 @@ static void OhrtExportSay(NSString *message) {
     [top presentViewController:alert animated:YES completion:nil];
 }
 
-// Checks a picked file and keeps it. Returns what to tell the user.
-static NSString *OhrtExportKeep(NSURL *url) {
-    BOOL scoped = [url startAccessingSecurityScopedResource];
-    NSData *data = [NSData dataWithContentsOfURL:url];
-    if (scoped) [url stopAccessingSecurityScopedResource];
-    id read = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+// Checks what was read from a picked folder or file and keeps it. Returns
+// what to tell the user. Main thread.
+static NSString *OhrtExportKeep(id read) {
     if (![read isKindOfClass:[NSDictionary class]] || ![read[kOhrtFactsFileMark] isKindOfClass:[NSNumber class]] || ![read[@"people"] isKindOfClass:[NSDictionary class]]) {
-        return @"That is not a facts file. Make one from your export with ohrt/tools/export.py and pick the file it writes.";
+        return @"That is neither an unpacked Insta\u2060gram export nor a facts file made from one. Unpack the export's zip in Files, then pick the folder it makes.";
     }
     if ([read[kOhrtFactsFileMark] integerValue] != 1) return @"That facts file was made by a newer export.py than this app knows how to read.";
+    if (![read[@"people"] count]) return @"Nothing about any account was found in there. Ask for the export as JSON, with followers and following in it.";
+    NSData *data = [NSJSONSerialization dataWithJSONObject:read options:0 error:nil];
+    if (!data) return @"What was read could not be kept.";
     id user = OhrtExportUser();
     NSString *account = OhrtExportText(OhrtCall(user, @"pk"));
     NSString *username = OhrtExportText(OhrtCall(user, @"username")).lowercaseString;
@@ -133,13 +134,36 @@ static NSString *OhrtExportKeep(NSURL *url) {
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
     NSURL *url = urls.firstObject;
     if (!url) return;
-    __block NSString *message = nil;
-    if (!OhrtTry(@"export", ^{
-            message = OhrtExportKeep(url);
-        })) message = @"The file could not be read.";
-    // The picker is still on its way out.
+    // A whole export has tens of megabytes of likes in it, so it is read
+    // off the main thread, with a note up meanwhile.
+    UIAlertController *wait = [UIAlertController alertControllerWithTitle:@"Reading your export" message:@"This can take a minute." preferredStyle:UIAlertControllerStyleAlert];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        OhrtExportSay(message);
+        [topMostController() presentViewController:wait animated:YES completion:nil];
+    });
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        __block id read = nil;
+        BOOL scoped = [url startAccessingSecurityScopedResource];
+        OhrtTry(@"export", ^{
+            BOOL folder = NO;
+            if ([[NSFileManager defaultManager] fileExistsAtPath:url.path isDirectory:&folder] && folder) {
+                read = OhrtReadExportFolder(url);
+            } else {
+                NSData *data = [NSData dataWithContentsOfURL:url];
+                read = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+            }
+        });
+        if (scoped) [url stopAccessingSecurityScopedResource];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            __block NSString *message = @"That could not be read.";
+            OhrtTry(@"export", ^{
+                message = OhrtExportKeep(read);
+            });
+            void (^say)(void) = ^{
+                OhrtExportSay(message);
+            };
+            if (wait.presentingViewController) [wait dismissViewControllerAnimated:YES completion:say];
+            else say();
+        });
     });
 }
 
@@ -151,9 +175,10 @@ void OhrtExportImport(void) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     // The older way of asking for a file, which needs nothing linked in
-    // that the tweak does not already have.
-    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[ @"public.json", @"public.text", @"public.data" ]
-                                                                                                    inMode:UIDocumentPickerModeImport];
+    // that the tweak does not already have. Opened in place, because a
+    // folder cannot be copied in the way a single file can.
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[ @"public.folder", @"public.json" ]
+                                                                                                    inMode:UIDocumentPickerModeOpen];
 #pragma clang diagnostic pop
     picker.delegate = [OhrtExportPicker shared];
     picker.allowsMultipleSelection = NO;
