@@ -52,6 +52,16 @@ static void time_budget(void) {
     CHECK("a later export leaves nothing to add", OhrtCountAfter(noted, 4, 900, &latest) == 0 && latest == 0);
     CHECK("no notes", OhrtCountAfter(noted, 0, 0, &latest) == 0 && latest == 0);
 
+    long long stamps[] = {1763300000123, 1763300004500, 1763300009999};
+    CHECK("a message already noted", OhrtNoted(stamps, 3, 1763300004500, 1));
+    CHECK("the same message with its time rounded the other way", OhrtNoted(stamps, 3, 1763300000124, 1) && OhrtNoted(stamps, 3, 1763300009998, 1));
+    CHECK("a message two milliseconds on is another", !OhrtNoted(stamps, 3, 1763300000125, 1));
+    CHECK("a new message", !OhrtNoted(stamps, 3, 1763300020000, 1) && !OhrtNoted(stamps, 0, 1763300000123, 1));
+    CHECK("an id has no slack", OhrtNoted(stamps, 3, 1763300004500, 0) && !OhrtNoted(stamps, 3, 1763300004501, 0));
+    CHECK("an id boils down to the same number each time", OhrtIdNumber("30076214123456789012345678901234567") == OhrtIdNumber("30076214123456789012345678901234567"));
+    CHECK("two ids to two numbers", OhrtIdNumber("30076214123456789012345678901234567") != OhrtIdNumber("30076214123456789012345678901234568"));
+    CHECK("the number can be filed", OhrtIdNumber("mid.$cAAA") > 0 && OhrtIdNumber("") > 0 && OhrtIdNumber(NULL) > 0);
+
     CHECK("the name on its own", OhrtNameStandsAlone(' ', ' ', 'i'));
     CHECK("the name at the start and the end of a text", OhrtNameStandsAlone(' ', ' ', ' '));
     CHECK("the name before a full stop", OhrtNameStandsAlone(' ', '.', ' '));

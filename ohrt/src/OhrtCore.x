@@ -114,6 +114,7 @@ static void OhrtAppLaunching(void) {
     OhrtInstallName();
     OhrtInstallFacts();
     OhrtInstallActivity();
+    OhrtInstallMessages();
     OhrtInstallSuggested();
     OhrtInstallDMMode();
     OhrtInstallFollowing();

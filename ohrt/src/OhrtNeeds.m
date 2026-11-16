@@ -56,6 +56,17 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("activity", "IGUserSession", "commentPostedAnnouncer"),
     OHRT_NEED("activity", "IGUserSession", "saveStatusAnnouncer"),
 
+    OHRT_NEED("messages", "IGDirectPublishedThread", "initWithThreadId:viewerId:threadIdV2ForInboxPaging:metadata:threadMessagesRange:messageIslandRange:visualMessageInfo:publishedMessageSet:publishedMessagesInCurrentThreadRange:publishedMessagesInCurrentThreadRangeSet:isOldMessageRequest:primarySortingDate:primarySortingDateIncludingShhMode:pinningDateIfPinned:"),
+    OHRT_NEED("messages", "IGDirectPublishedThread", "initWithCoder:"),
+    OHRT_NEED("messages", "IGDirectPublishedThread", "metadata"),
+    OHRT_NEED("messages", "IGDirectPublishedThread", "publishedMessageSet"),
+    OHRT_NEED("messages", "IGDirectThreadMetadata", "isGroup"),
+    OHRT_NEED("messages", "IGDirectThreadMetadata", "users"),
+    OHRT_NEED("messages", "IGDirectPublishedMessageSet", "countByEnumeratingWithState:objects:count:"),
+    OHRT_NEED("messages", "IGDirectPublishedMessage", "metadata"),
+    OHRT_NEED("messages", "IGDirectPublishedMessageMetadata", "serverId"),
+    OHRT_NEED("messages", "IGDirectPublishedMessageMetadata", "serverTimestamp"),
+
     OHRT_NEED("suggested", "IGProfileHeaderView", "objectsForListAdapter:"),
 
     OHRT_NEED("dm", "IGTabBarController", "viewWillAppear:"),
@@ -133,7 +144,7 @@ NSString *OhrtSelfCheck(void) {
     NSString *instagram = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     [report appendFormat:@"ohrtstagram %@ (%@) on Insta\u2060gram %@, iOS %@\n", OHRT_VERSION, OHRT_BUILD, instagram, [UIDevice currentDevice].systemVersion];
     [report appendFormat:@"safe mode this start: %@\n", OhrtSafeLaunch() ? @"yes" : @"no"];
-    for (NSString *feature in @[ @"start", @"wordmark", @"facts", @"activity", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
+    for (NSString *feature in @[ @"start", @"wordmark", @"facts", @"activity", @"messages", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
         NSString *missing = OhrtMissing(feature);
         [report appendFormat:@"%@: %@\n", feature, missing ? [@"missing " stringByAppendingString:missing] : @"ok"];
     }

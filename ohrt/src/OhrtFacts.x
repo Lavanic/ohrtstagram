@@ -172,10 +172,14 @@ static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString 
         [facts addObjectsFromArray:done];
     }
 
+    // The export has the conversation from its first message. One it does
+    // not have, or cannot tell from another by its name, is counted from
+    // where our own count starts.
     NSDictionary *thread = OhrtExportThread(OhrtText(OhrtCall(user, @"fullName")));
-    NSInteger messages = [thread[@"messages"] integerValue];
+    NSTimeInterval counted = 0;
+    NSInteger messages = [thread[@"messages"] integerValue] + OhrtActivityMessages(pk, &counted);
     if (messages > 0) {
-        [facts addObject:[NSString stringWithFormat:@"%ld %@ between you since %@", (long)messages, messages == 1 ? @"message" : @"messages", OhrtStamp(thread[@"first"])]];
+        [facts addObject:[NSString stringWithFormat:@"%ld %@ between you since %@", (long)messages, messages == 1 ? @"message" : @"messages", OhrtStamp(thread[@"first"] ?: @(counted))]];
     }
 }
 

@@ -67,6 +67,29 @@ static inline size_t OhrtCountAfter(const double *times, size_t count, double af
     return counted;
 }
 
+// Messages
+//
+// A message is kept as two numbers: its time in milliseconds since 1970,
+// and its id boiled down to one number. It has been noted before if either
+// is on file. The id alone would do, but for a conversation that is moved
+// to other servers and has its messages renumbered. The time alone would
+// do, but for a message whose time is corrected after it is sent. The same
+// time can also be read rounded either way, hence the slack.
+static inline int OhrtNoted(const long long *noted, size_t count, long long value, long long slack) {
+    for (size_t index = 0; index < count; index++) {
+        long long apart = noted[index] - value;
+        if (apart >= -slack && apart <= slack) return 1;
+    }
+    return 0;
+}
+
+// FNV-1a, kept positive so that it can be filed as a whole number.
+static inline long long OhrtIdNumber(const char *id) {
+    unsigned long long hash = 14695981039346656037ULL;
+    for (const unsigned char *at = (const unsigned char *)id; at && *at; at++) hash = (hash ^ *at) * 1099511628211ULL;
+    return (long long)(hash & 0x7fffffffffffffffULL);
+}
+
 // The app's name in its text
 //
 // Whether "Instagram", found in a piece of text, stands there as the app's

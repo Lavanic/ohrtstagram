@@ -10,8 +10,9 @@
 //  - every like of a post goes through one method on the post;
 //  - a story counts as seen where the story viewer marks it seen, and as
 //    liked where the viewer sends the like.
-// Messages are not noted: the export counts both directions, and what
-// arrives would have to be counted as well as what is sent.
+// Messages are kept here too, but are not noted as they are sent: they are
+// read off the conversations (OhrtMessages.x), so that what arrives counts
+// as well as what is sent.
 //
 // What is kept is a time per event, by account id, in a file of the app's
 // own on this phone. A time and not a running count, so that a later export
@@ -21,8 +22,15 @@
 #import <objc/runtime.h>
 
 #import "Ohrt.h"
+#import "OhrtLogic.h"
 
 static NSString *const kOhrtFollowedKind = @"followed";
+static NSString *const kOhrtMessageStamps = @"messages_ms";
+static NSString *const kOhrtMessageIds = @"messages_id";
+
+// The notes' own entry, filed like an account under a name none can have.
+static NSString *const kOhrtNotesOwn = @"_";
+static NSString *const kOhrtMessagesBegan = @"messages_began";
 
 // What Instagram calls a follow when it announces a change of friendship.
 // Read out of its own listener for new follows, which acts only on this.
@@ -176,6 +184,124 @@ NSArray<NSNumber *> *OhrtActivityTimes(NSString *pk, NSString *kind) {
     return [times isKindOfClass:[NSArray class]] ? [times copy] : nil;
 }
 
+// The time from which messages are counted here: when the export was made,
+// since it counts the ones before. With no export it is when this began to
+// keep count, because a conversation only ever shows its latest stretch,
+// and counting that would give a number that grows as you scroll back. 0
+// while it is not known whose notes these are.
+static NSTimeInterval OhrtMessagesAfter(void) {
+    NSMutableDictionary<NSString *, NSMutableDictionary *> *notes = OhrtNotes();
+    if (!notes) return 0;
+    NSTimeInterval exported = OhrtExportDate();
+    if (exported > 0) return exported;
+    NSMutableDictionary *own = notes[kOhrtNotesOwn] ?: (notes[kOhrtNotesOwn] = [NSMutableDictionary dictionary]);
+    NSNumber *began = own[kOhrtMessagesBegan];
+    if (![began isKindOfClass:[NSNumber class]]) {
+        began = own[kOhrtMessagesBegan] = @((long long)[NSDate date].timeIntervalSince1970);
+        OhrtNotesChanged();
+    }
+    return began.doubleValue;
+}
+
+// Conversations are read from the moment the app starts, which is before
+// it is known who is signed in. What is read until then waits here.
+static NSMutableArray<NSArray *> *gOhrtMessagesWaiting;
+
+// The whole numbers filed under `kind` for a person, with room for `more`.
+static long long *OhrtNumbersKept(NSDictionary *person, NSString *kind, size_t more, size_t *count) {
+    NSArray *kept = [person[kind] isKindOfClass:[NSArray class]] ? person[kind] : nil;
+    *count = kept.count;
+    long long *numbers = malloc((kept.count + more + 1) * sizeof(long long));
+    if (!numbers) return NULL;
+    for (size_t index = 0; index < kept.count; index++) numbers[index] = [kept[index] isKindOfClass:[NSNumber class]] ? [kept[index] longLongValue] : 0;
+    return numbers;
+}
+
+static NSMutableArray *OhrtNumbersToAddTo(NSMutableDictionary *person, NSString *kind) {
+    id kept = person[kind];
+    if ([kept isKindOfClass:[NSMutableArray class]]) return kept;
+    return person[kind] = [kept isKindOfClass:[NSArray class]] ? [kept mutableCopy] : [NSMutableArray array];
+}
+
+static void OhrtNoteMessagesNow(NSString *pk, NSString *viewer, NSArray<NSNumber *> *stamps, NSArray<NSNumber *> *ids) {
+    if (stamps.count != ids.count) return;
+    // Another account's conversations, if the app has them loaded as well.
+    if (viewer.length && ![viewer isEqualToString:gOhrtNotesAccount]) {
+        static BOOL said;
+        if (!said) OhrtLog(@"activity: messages in a conversation that is not this account's are left out");
+        said = YES;
+        return;
+    }
+    NSTimeInterval after = OhrtMessagesAfter();
+    NSMutableDictionary *person = OhrtNotesPerson(pk, NO);
+    size_t stampCount = 0, idCount = 0;
+    long long *notedStamps = OhrtNumbersKept(person, kOhrtMessageStamps, stamps.count, &stampCount);
+    long long *notedIds = OhrtNumbersKept(person, kOhrtMessageIds, ids.count, &idCount);
+    NSMutableArray<NSNumber *> *freshStamps = [NSMutableArray array], *freshIds = [NSMutableArray array];
+    NSUInteger early = 0;
+    for (NSUInteger index = 0; notedStamps && notedIds && index < stamps.count; index++) {
+        long long at = stamps[index].longLongValue, number = ids[index].longLongValue;
+        if (!((double)at / 1000.0 > after)) {
+            early++;
+            continue;
+        }
+        if (OhrtNoted(notedIds, idCount, number, 0) || OhrtNoted(notedStamps, stampCount, at, 1)) continue;
+        notedStamps[stampCount++] = at;
+        notedIds[idCount++] = number;
+        [freshStamps addObject:@(at)];
+        [freshIds addObject:@(number)];
+    }
+    free(notedStamps);
+    free(notedIds);
+
+    static NSUInteger told;
+    if (told < 24) {
+        told++;
+        OhrtLog(@"activity: of %lu messages read, %lu are from before %@ and %lu are new", (unsigned long)stamps.count, (unsigned long)early, OhrtExportDate() > 0 ? @"the export" : @"counting began", (unsigned long)freshStamps.count);
+    }
+    if (!freshStamps.count) return;
+    person = OhrtNotesPerson(pk, YES);
+    if (!person) return;
+    [OhrtNumbersToAddTo(person, kOhrtMessageStamps) addObjectsFromArray:freshStamps];
+    [OhrtNumbersToAddTo(person, kOhrtMessageIds) addObjectsFromArray:freshIds];
+    OhrtSay(@"messages", YES);
+    OhrtNotesChanged();
+}
+
+static void OhrtMessagesCatchUp(void) {
+    if (!gOhrtMessagesWaiting.count || !OhrtNotes()) return;
+    NSArray<NSArray *> *waiting = gOhrtMessagesWaiting;
+    gOhrtMessagesWaiting = nil;
+    for (NSArray *one in waiting) OhrtNoteMessagesNow(one[0], [one[1] length] ? one[1] : nil, one[2], one[3]);
+}
+
+void OhrtActivityNoteMessages(NSString *pk, NSString *viewer, NSArray<NSNumber *> *stamps, NSArray<NSNumber *> *ids) {
+    if (!pk.length || !stamps.count || !ids) return;
+    if (!OhrtNotes()) {
+        if (!gOhrtMessagesWaiting) gOhrtMessagesWaiting = [NSMutableArray array];
+        if (gOhrtMessagesWaiting.count < 4000) [gOhrtMessagesWaiting addObject:@[ pk, viewer ?: @"", stamps, ids ]];
+        return;
+    }
+    OhrtMessagesCatchUp();
+    OhrtNoteMessagesNow(pk, viewer, stamps, ids);
+}
+
+NSInteger OhrtActivityMessages(NSString *pk, NSTimeInterval *since) {
+    OhrtMessagesCatchUp();
+    NSTimeInterval after = OhrtMessagesAfter();
+    *since = after;
+    id stamps = OhrtNotesPerson(pk, NO)[kOhrtMessageStamps];
+    if (![stamps isKindOfClass:[NSArray class]] || ![stamps count]) return 0;
+    size_t length = [stamps count];
+    double *times = malloc(length * sizeof(double));
+    if (!times) return 0;
+    for (size_t index = 0; index < length; index++) times[index] = [stamps[index] doubleValue] / 1000.0;
+    double latest = 0;
+    NSInteger count = (NSInteger)OhrtCountAfter(times, length, after, &latest);
+    free(times);
+    return count;
+}
+
 // Hears what Instagram announces. An announcer may tell its listeners more
 // than the things wanted here, and a listener that does not know a message
 // would bring the app down, so every other message is taken and dropped.
@@ -230,6 +356,7 @@ static void OhrtListen(void) {
         [asked addObject:name];
     }
     heard = session;
+    OhrtMessagesCatchUp();
     OhrtLog(@"activity: listening to %@", asked.count ? [asked componentsJoinedByString:@", "] : @"nothing, this session has none of the announcers");
 }
 

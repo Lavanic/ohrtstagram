@@ -55,6 +55,7 @@ FOUNDATION_EXPORT void OhrtInstallName(void);
 FOUNDATION_EXPORT void OhrtInstallFacts(void);
 FOUNDATION_EXPORT void OhrtInstallActivity(void);
 FOUNDATION_EXPORT void OhrtInstallSuggested(void);
+FOUNDATION_EXPORT void OhrtInstallMessages(void);
 
 // What a feature needs from the Instagram that is running (OhrtNeeds.m).
 FOUNDATION_EXPORT NSString *OhrtMissing(NSString *feature);
@@ -105,6 +106,14 @@ FOUNDATION_EXPORT void OhrtExportImport(void);
 FOUNDATION_EXPORT NSNumber *OhrtActivityFollowed(NSString *pk);
 FOUNDATION_EXPORT NSArray<NSNumber *> *OhrtActivityTimes(NSString *pk, NSString *kind);
 FOUNDATION_EXPORT void OhrtActivityListen(void);
+// Messages with the account `pk`, read off a conversation that belongs to
+// the account `viewer` (OhrtMessages.x): for each its time in milliseconds
+// since 1970 and its id as a number. Those not noted before are. Main
+// thread.
+FOUNDATION_EXPORT void OhrtActivityNoteMessages(NSString *pk, NSString *viewer, NSArray<NSNumber *> *stamps, NSArray<NSNumber *> *ids);
+// How many messages have been noted with `pk` beyond what the export
+// counts, and in `since` the time they have been counted from.
+FOUNDATION_EXPORT NSInteger OhrtActivityMessages(NSString *pk, NSTimeInterval *since);
 
 // The following feed is on by its own switch, or because the wall needs it.
 FOUNDATION_EXPORT BOOL OhrtFollowingFeedEnabled(void);
