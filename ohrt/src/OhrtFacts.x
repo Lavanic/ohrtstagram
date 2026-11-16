@@ -385,12 +385,18 @@ static id OhrtFactsUser(UIView *header) {
         if (!text.length) return;
         OhrtFactsModel *model = [OhrtFactsModel new];
         model.text = text;
-        // Just before the buttons, which is under "Followed by" when the
-        // profile has that. A header with no buttons gets it at the end.
+        // Above the buttons, which is under "Followed by" when the profile
+        // has that. On your own profile Instagram puts a block of its own
+        // above the buttons a moment after the rest, and anything already
+        // sitting there is pushed down as it arrives. So ours goes above
+        // that block's place too, and stays where it first appears. A
+        // header with neither gets it at the end.
         Class buttons = NSClassFromString(@"IGProfileActionBarViewModel");
+        Class late = NSClassFromString(@"IGBloksHyperdashViewModel");
         NSUInteger at = objects.count;
         for (NSUInteger index = 0; index < objects.count; index++) {
-            if (buttons && [objects[index] isKindOfClass:buttons]) {
+            id object = objects[index];
+            if ((buttons && [object isKindOfClass:buttons]) || (late && [object isKindOfClass:late])) {
                 at = index;
                 break;
             }
