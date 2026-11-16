@@ -67,8 +67,11 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("messages", "IGDirectPublishedMessageMetadata", "serverId"),
     OHRT_NEED("messages", "IGDirectPublishedMessageMetadata", "serverTimestamp"),
 
-    OHRT_NEED("likes", "IGMediaInteractionCountVisibilityHelper", "shouldHideLikeAndViewCountsForMediaUserPK:likeAndViewCountsDisabled:mediaIsInDaisy:"),
-    OHRT_NEED("likes", "IGUFIInteractionCountProvider", "initWithViewModel:interactionCountVisibilityHelper:"),
+    OHRT_NEED("likes", "IGFollowListViewController", "_updateTitle"),
+    OHRT_NEED("likes", "IGUserListNetworkDataSource", "media"),
+    OHRT_NEED("likes", "IGUserListNetworkDataSource", "numberOfResults"),
+    OHRT_NEED("likes", "IGUserListNetworkDataSource", "totalUsersCount"),
+    OHRT_NEED("likes", "IGUserListNetworkDataSource", "moreAvailable"),
 
     OHRT_NEED("postfacts", "IGFeedItemTimelineViewModelImpl", "initWithMedia:configuration:feedConfiguration:userSession:showAYMFCellBelowHeader:showInlineComposer:showRowStyleCTA:isDelayedRowCTAVisible:showWYTSurvey:isMLEXPreview:coauthorRowType:shouldShowAdsFeedbackInterface:shouldShowAdsFeedbackInterfaceRepetition:afiInterestsPickerState:leadGenInterestPickerCellViewState:shouldShowInjectedFeedUnit:shouldShowInlineCommentPreview:shouldLogRowTypes:shouldHideHeaderRow:shouldShowOnImpressionControl:showDelaySkipAdNUX:isFloatingSocialContextDismissed:shouldExpandCTAVertically:showDelaySkipAdPersistentTombstone:shouldShowHIDEntryPoint:shouldShowChainingTopicTray:shouldShowSponsoredLabelInFooter:shouldRenderDestinationInfoAttachement:commercePageEligibleModules:"),
     OHRT_NEED("postfacts", "IGFeedItemTimelineViewModelImpl", "rowItems"),

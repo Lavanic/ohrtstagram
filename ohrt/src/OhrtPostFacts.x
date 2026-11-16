@@ -3,11 +3,14 @@
 // does not show.
 //
 //   posted 2026-11-14 18:02, made 2026-11-12 09:15 (2d before posting),
-//   caption edited, 1080x1350, 12,347 likes, 340 comments, 98,765 plays,
-//   at 40.71280, -74.00600, ai sees: 2 people, beach and text
+//   caption edited, 1080x1350, 98,765 plays, tagged place at 40.71280,
+//   -74.00600, ai sees: 2 people, beach and text
 //
-// Nothing is asked of Instagram for it: it is read off the post as the
-// feed received it, so a fact the server did not send is left out.
+// Only what Instagram does not show already. Nothing is asked of it: this
+// is read off the post as the feed received it, so a fact the server did
+// not send is left out. The one exception is a hidden like count, which
+// the server does not send at all; that is counted from who liked it once
+// you have opened that list (OhrtLikes.x).
 //
 // A post in the feed is one list section whose rows (header, picture,
 // buttons, likes, caption, comments) come from an array its view model
@@ -152,8 +155,13 @@ static NSString *OhrtPostText(id media) {
     id detection = OhrtCallValue(media, @"genAiDetectionMethod");
     if (detection) {
         [fields addObject:@"gen_ai_detection_method"];
+        // How Instagram knows the post was made with AI, which is what puts
+        // its "AI info" label on it: the owner said so, the file carried an
+        // AI tool's marks, or Meta's own detection.
         NSString *method = OhrtPostString(OhrtCallValue(detection, @"detectionMethod"));
-        if (method.length && ![method.uppercaseString isEqualToString:@"NONE"]) [facts addObject:[@"marked ai, " stringByAppendingString:method.lowercaseString]];
+        if (method.length && ![method.uppercaseString isEqualToString:@"NONE"]) {
+            [facts addObject:[@"ai label, found by " stringByAppendingString:[method.lowercaseString stringByReplacingOccurrencesOfString:@"_" withString:@" "]]];
+        }
     }
 
     NSNumber *width = OhrtPostNumber(OhrtCallValue(media, @"originalWidth")), *height = OhrtPostNumber(OhrtCallValue(media, @"originalHeight"));
@@ -161,17 +169,15 @@ static NSString *OhrtPostText(id media) {
 
     if ([OhrtPostNumber(OhrtCallValue(media, @"hasSharedToFb")) integerValue] > 0) [facts addObject:@"also on facebook"];
 
-    NSNumber *likes = OhrtPostNumber(OhrtCallValue(media, @"likeCount"));
-    BOOL hidden = [OhrtPostNumber(OhrtCallValue(media, @"likeAndViewCountsDisabled")) boolValue];
-    if (likes) {
-        [fields addObject:hidden ? @"like_count(hidden)" : @"like_count"];
-        if (likes.longLongValue > 0 || !hidden) [facts addObject:[NSString stringWithFormat:@"%@ %@%@", OhrtPostCount(likes.longLongValue), likes.longLongValue == 1 ? @"like" : @"likes", hidden ? @" (hidden)" : @""]];
+    // A shown like count is Instagram's own. A hidden one comes as a
+    // stand-in, so only a count made from who liked it is used.
+    if ([OhrtPostNumber(OhrtCallValue(media, @"likeAndViewCountsDisabled")) boolValue]) {
+        NSString *counted = OhrtLikesCounted(media);
+        if (counted) [facts addObject:[counted stringByAppendingString:@", counted from who liked it"]];
     }
     NSArray<NSArray *> *counts = @[
-        @[ @"commentCount", @"comment", @"comments" ],
         @[ @"igPlayCount", @"play", @"plays" ],
         @[ @"viewCount", @"view", @"views" ],
-        @[ @"reshareCount", @"share", @"shares" ],
         @[ @"saveCount", @"save", @"saves" ],
         @[ @"fbLikeCount", @"facebook like", @"facebook likes" ],
         @[ @"fbPlayCount", @"facebook play", @"facebook plays" ],
@@ -191,7 +197,9 @@ static NSString *OhrtPostText(id media) {
     NSNumber *lat = OhrtPostNumber(OhrtCallValue(media, @"lat")), *lng = OhrtPostNumber(OhrtCallValue(media, @"lng"));
     if (lat && lng && (lat.doubleValue != 0 || lng.doubleValue != 0)) {
         [fields addObject:@"lat_lng"];
-        [facts addObject:[NSString stringWithFormat:@"at %.5f, %.5f", lat.doubleValue, lng.doubleValue]];
+        // The place the post is tagged with, not where the picture was taken:
+        // Instagram strips that from the file.
+        [facts addObject:[NSString stringWithFormat:@"tagged place at %.5f, %.5f", lat.doubleValue, lng.doubleValue]];
     }
 
     NSString *caption = OhrtPostString(OhrtCallValue(media, @"accessibilityCaption"));

@@ -60,6 +60,9 @@ FOUNDATION_EXPORT void OhrtInstallSuggested(void);
 FOUNDATION_EXPORT void OhrtInstallMessages(void);
 FOUNDATION_EXPORT void OhrtInstallLikes(void);
 FOUNDATION_EXPORT void OhrtInstallPostFacts(void);
+// The like count of a post that hides it, as counted from who liked it
+// (OhrtLikes.x), such as "1,234 likes", or nil until that list is opened.
+FOUNDATION_EXPORT NSString *OhrtLikesCounted(id media);
 
 // The small red text of the facts lines (OhrtFacts.x), on a profile and
 // under a post.

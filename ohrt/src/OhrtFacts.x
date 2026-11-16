@@ -5,9 +5,6 @@
 //   you liked 214 posts (last 2026-10-30), commented 12 times, watched 88 stories since 2026-11-15,
 //   340 messages between you since 2020-01-10, story 3h ago
 //
-// Tapping the line offers to save the account's profile picture at full
-// size, and to copy its id or username.
-//
 // There are two sources, and nothing is asked of Instagram for either. The
 // first is what the app already holds when a profile opens: the id, the
 // kind of account, whether it follows you, its latest story. The second is
@@ -264,10 +261,6 @@ static NSString *OhrtFactsText(id user) {
 // list tells its parts apart by these two methods.
 @interface OhrtFactsModel : NSObject
 @property (nonatomic, copy) NSString *text;
-@property (nonatomic, copy) NSString *pk;
-@property (nonatomic, copy) NSString *username;
-@property (nonatomic, copy) NSString *picture;
-@property (nonatomic, copy) NSArray<NSString *> *pictures;
 @end
 
 @implementation OhrtFactsModel
@@ -282,78 +275,9 @@ static NSString *OhrtFactsText(id user) {
 
 @end
 
-// Saves pictures to Photos, and says how that went when the last is done.
-@interface OhrtPictureSaver : NSObject
-@property (nonatomic) NSUInteger left, saved;
-@property (nonatomic, copy) NSString *problem, *size;
-@property (nonatomic, weak) UIView *from;
-@end
-
-static NSMutableSet<OhrtPictureSaver *> *gOhrtSavers;
-
-static UIViewController *OhrtFactsTop(UIView *view) {
-    UIViewController *top = view.window.rootViewController;
-    while (top.presentedViewController) top = top.presentedViewController;
-    return top;
-}
-
-@implementation OhrtPictureSaver
-
-- (void)oneDone {
-    if (self.left) self.left--;
-    if (self.left) return;
-    NSString *title = self.saved ? @"Saved to Photos" : @"Not saved";
-    NSString *message = self.saved == 1 && self.size ? self.size : self.saved > 1 ? [NSString stringWithFormat:@"%lu pictures", (unsigned long)self.saved] : nil;
-    if (self.problem) message = message ? [NSString stringWithFormat:@"%@. %@", message, self.problem] : self.problem;
-    OhrtLog(@"facts: %lu profile pictures saved%@", (unsigned long)self.saved, self.problem ? @", and one or more were not" : @"");
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-    UIViewController *top = OhrtFactsTop(self.from);
-    if (top) [top presentViewController:alert animated:YES completion:nil];
-    [gOhrtSavers removeObject:self];
-}
-
-- (void)image:(UIImage *)image didFinishSavingWithError:(NSError *)error contextInfo:(void *)info {
-    if (error) self.problem = error.localizedDescription;
-    else self.saved++;
-    [self oneDone];
-}
-
-@end
-
-static void OhrtSavePictures(NSArray<NSString *> *addresses, UIView *from) {
-    if (!addresses.count) return;
-    OhrtPictureSaver *saver = [OhrtPictureSaver new];
-    saver.left = addresses.count;
-    saver.from = from;
-    if (!gOhrtSavers) gOhrtSavers = [NSMutableSet set];
-    [gOhrtSavers addObject:saver];
-    for (NSString *address in addresses) {
-        NSURL *url = [NSURL URLWithString:address];
-        if (!url) {
-            saver.problem = @"A picture had no address.";
-            [saver oneDone];
-            continue;
-        }
-        [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-            UIImage *image = data ? [UIImage imageWithData:data] : nil;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (!image) {
-                    saver.problem = error.localizedDescription ?: @"A picture could not be loaded.";
-                    [saver oneDone];
-                    return;
-                }
-                saver.size = [NSString stringWithFormat:@"%.0f by %.0f", image.size.width * image.scale, image.size.height * image.scale];
-                UIImageWriteToSavedPhotosAlbum(image, saver, @selector(image:didFinishSavingWithError:contextInfo:), NULL);
-            });
-        }] resume];
-    }
-}
-
 @interface OhrtFactsCell : UICollectionViewCell
 @property (nonatomic, strong) UILabel *label;
 @property (nonatomic) CGFloat side;
-@property (nonatomic, strong) OhrtFactsModel *model;
 @end
 
 @implementation OhrtFactsCell
@@ -367,48 +291,8 @@ static void OhrtSavePictures(NSArray<NSString *> *addresses, UIView *from) {
         _label.numberOfLines = 0;
         _label.lineBreakMode = NSLineBreakByWordWrapping;
         [self.contentView addSubview:_label];
-        [self.contentView addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(ohrtTapped)]];
     }
     return self;
-}
-
-- (void)ohrtTapped {
-    OhrtFactsModel *model = self.model;
-    UIViewController *top = OhrtFactsTop(self);
-    if (!model || !top) return;
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:model.username.length ? [@"@" stringByAppendingString:model.username] : nil
-                                                                   message:nil
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    __weak OhrtFactsCell *weakSelf = self;
-    if (model.picture.length) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"Save profile picture" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            OhrtSavePictures(@[ model.picture ], weakSelf);
-        }]];
-    }
-    if (model.pictures.count > 1) {
-        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Save all %lu profile pictures", (unsigned long)model.pictures.count]
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *action) {
-                                                    OhrtSavePictures(model.pictures, weakSelf);
-                                                }]];
-    }
-    if (model.username.length) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"Copy username" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            [UIPasteboard generalPasteboard].string = model.username;
-        }]];
-    }
-    if (model.pk.length) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"Copy account id" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            [UIPasteboard generalPasteboard].string = model.pk;
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Copy these facts" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        [UIPasteboard generalPasteboard].string = model.text;
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    sheet.popoverPresentationController.sourceView = self;
-    sheet.popoverPresentationController.sourceRect = self.bounds;
-    [top presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)layoutSubviews {
@@ -465,7 +349,6 @@ static id OhrtFactsCellForItem(id self, SEL _cmd, NSInteger index) {
     if ([cell isKindOfClass:[OhrtFactsCell class]]) {
         cell.side = OhrtFactsSideIn(list);
         cell.label.text = model.text;
-        cell.model = model;
         [cell setNeedsLayout];
     }
     return cell;
@@ -505,21 +388,6 @@ static Class OhrtFactsControllerClass(void) {
         made = controller;
     });
     return made;
-}
-
-// The account's profile picture at the size Instagram keeps it, and every
-// picture when the account has more than one.
-static void OhrtFactsAddPictures(OhrtFactsModel *model, id user) {
-    NSMutableArray<NSString *> *all = [NSMutableArray array];
-    id several = OhrtCallValue(user, @"hdMultipleProfilePictureURLStrings");
-    if ([several isKindOfClass:[NSArray class]]) {
-        for (id address in several) {
-            if ([address isKindOfClass:[NSString class]] && [address length]) [all addObject:address];
-        }
-    }
-    model.pictures = all;
-    NSString *full = OhrtText(OhrtCallValue(OhrtCallValue(user, @"hdProfilePicUrlInfo"), @"urlString"));
-    model.picture = full.length ? full : all.firstObject ?: OhrtText(OhrtCallValue(user, @"profilePicURLString"));
 }
 
 // Whose profile a header is showing.
@@ -562,9 +430,6 @@ static id OhrtFactsUser(UIView *header) {
         if (!text.length) return;
         OhrtFactsModel *model = [OhrtFactsModel new];
         model.text = text;
-        model.pk = OhrtText(OhrtCall(user, @"pk"));
-        model.username = OhrtText(OhrtCallValue(user, @"username"));
-        OhrtFactsAddPictures(model, user);
         // Above the buttons, which is under "Followed by" when the profile
         // has that. On your own profile Instagram puts a block of its own
         // above the buttons a moment after the rest, and anything already

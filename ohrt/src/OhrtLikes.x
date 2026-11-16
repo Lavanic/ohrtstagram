@@ -1,75 +1,102 @@
-// Shows the like count on a post whose owner has hidden it.
+// The like count of a post whose owner hid it.
 //
-// Instagram asks one object whether a post's counts are to be kept from
-// view. It says yes for a post whose owner hid them, for a post in an older
-// trial that hid them from everyone ("daisy"), or because you chose in
-// Instagram's own settings not to see counts on other people's posts. With
-// this on it is asked as though the first two were not so. Your own choice
-// still stands.
+// Instagram does not send that count: a post with hidden likes comes with
+// a stand-in, mostly 3, that is the same for everyone and goes back to it
+// after you like the post. What it does still send is who liked it, when
+// you open that list. So the count is taken there: the list's total when
+// the server gives one larger than what is listed, otherwise how many are
+// listed, with a "+" while there are more to load. It shows at the top of
+// the list, and the post's facts line has it from then on.
 //
-// There is only a number to show if Instagram sent one with the post. The
-// log says what came with the first such posts seen in the feed.
-#import <objc/message.h>
+// Nothing extra is asked of Instagram. The list is the one it loads when
+// you tap "Liked by".
+#import <objc/runtime.h>
 
 #import "Ohrt.h"
+#import "OhrtLogic.h"
 
 NSString *const kOhrtLikesKey = @"ohrt_hidden_likes";
 
-@interface IGMediaInteractionCountVisibilityHelper : NSObject
+@interface IGFollowListViewController : UIViewController
 @end
 
-@interface IGUFIInteractionCountProvider : NSObject
-@end
+// Counted so far, by post id, as {count, more}. Read by the facts line on
+// whichever thread makes a post's rows.
+static NSMutableDictionary<NSString *, NSArray<NSNumber *> *> *gOhrtCounted;
 
-static void OhrtLikesSay(NSString *what) {
-    static NSMutableSet<NSString *> *said;
+static NSObject *OhrtCountedLock(void) {
+    static NSObject *lock;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        said = [NSMutableSet set];
+        lock = [NSObject new];
+        gOhrtCounted = [NSMutableDictionary dictionary];
     });
-    @synchronized(said) {
-        if ([said containsObject:what]) return;
-        [said addObject:what];
+    return lock;
+}
+
+static NSString *OhrtLikesMediaId(id media) {
+    id value = OhrtCallValue(media, @"mediaID") ?: OhrtCallValue(media, @"mediaId");
+    if ([value isKindOfClass:[NSNumber class]]) value = [value stringValue];
+    return [value isKindOfClass:[NSString class]] && [value length] ? value : nil;
+}
+
+static NSString *OhrtLikesText(long long count, BOOL more) {
+    char grouped[32];
+    OhrtGroupDigits(count, grouped, sizeof(grouped));
+    return [NSString stringWithFormat:@"%s%@ %@", grouped, more ? @"+" : @"", count == 1 && !more ? @"like" : @"likes"];
+}
+
+NSString *OhrtLikesCounted(id media) {
+    NSString *mediaId = OhrtLikesMediaId(media);
+    if (!mediaId) return nil;
+    NSArray<NSNumber *> *counted;
+    @synchronized(OhrtCountedLock()) {
+        counted = gOhrtCounted[mediaId];
     }
-    OhrtLog(@"likes: %@", what);
+    return counted ? OhrtLikesText(counted[0].longLongValue, counted[1].boolValue) : nil;
 }
 
-// Whether `object` answers `name` with a value of the kind `wanted`
-// ('B' or 'q'), so that it can be asked without guessing.
-static BOOL OhrtLikesAnswers(id object, SEL name, char wanted) {
-    NSMethodSignature *signature = [object respondsToSelector:name] ? [object methodSignatureForSelector:name] : nil;
-    if (!signature || signature.numberOfArguments != 2) return NO;
-    char kind = signature.methodReturnType[0];
-    return wanted == 'B' ? (kind == 'B' || kind == 'c') : kind == wanted;
-}
+static void OhrtLikesTitle(IGFollowListViewController *list) {
+    Ivar ivar = class_getInstanceVariable([list class], "_networkDataSource");
+    id source = ivar ? object_getIvar(list, ivar) : nil;
+    id media = OhrtCallValue(source, @"media");
+    if (!media || ![OhrtCallValue(media, @"likeAndViewCountsDisabled") boolValue]) return;
+    long long listed = [OhrtCallValue(source, @"numberOfResults") longLongValue];
+    long long total = [OhrtCallValue(source, @"totalUsersCount") longLongValue];
+    BOOL more = [OhrtCallValue(source, @"moreAvailable") boolValue];
+    if (listed <= 0 && total <= 0) return;
+    long long count = MAX(listed, total);
+    BOOL plus = more && listed >= total;
 
-static void OhrtLikesLook(id model) {
-    SEL hidden = NSSelectorFromString(@"likeAndViewCountsDisabled"), count = NSSelectorFromString(@"likeCount");
-    if (!OhrtLikesAnswers(model, hidden, 'B') || !OhrtLikesAnswers(model, count, 'q')) return;
-    if (!((BOOL (*)(id, SEL))objc_msgSend)(model, hidden)) return;
-    long long likes = ((long long (*)(id, SEL))objc_msgSend)(model, count);
-    if (likes < 0) OhrtLikesSay(@"a post that hides its count came with a count below 0");
-    else if (likes == 0) OhrtLikesSay(@"a post that hides its count came with a count of 0");
-    else OhrtLikesSay([NSString stringWithFormat:@"a post that hides its count came with a count of %lu digits", (unsigned long)[NSString stringWithFormat:@"%lld", likes].length]);
+    static NSUInteger told;
+    if (told < 6) {
+        told++;
+        OhrtLog(@"likes: who liked a hidden post, %lld listed, a total of %lld given, %@ more to load, and the post itself says %lld", listed, total, more ? @"with" : @"no",
+                [OhrtCallValue(media, @"likeCount") longLongValue]);
+    }
+
+    NSString *mediaId = OhrtLikesMediaId(media);
+    if (mediaId) {
+        @synchronized(OhrtCountedLock()) {
+            gOhrtCounted[mediaId] = @[ @(count), @(plus) ];
+        }
+    }
+    NSString *title = OhrtLikesText(count, plus);
+    list.navigationItem.title = title;
+    if ([list.navigationItem.titleView isKindOfClass:[UILabel class]]) {
+        ((UILabel *)list.navigationItem.titleView).text = title;
+        [list.navigationItem.titleView sizeToFit];
+    }
 }
 
 %group OhrtLikes
 
-%hook IGMediaInteractionCountVisibilityHelper
-- (BOOL)shouldHideLikeAndViewCountsForMediaUserPK:(id)pk likeAndViewCountsDisabled:(BOOL)disabled mediaIsInDaisy:(BOOL)daisy {
-    if (disabled) OhrtLikesSay(@"asked about a post whose owner hid its count");
-    if (daisy) OhrtLikesSay(@"asked about a post in the old trial");
-    return %orig(pk, NO, NO);
-}
-%end
-
-%hook IGUFIInteractionCountProvider
-- (id)initWithViewModel:(id)model interactionCountVisibilityHelper:(id)helper {
-    id provider = %orig;
+%hook IGFollowListViewController
+- (void)_updateTitle {
+    %orig;
     OhrtTry(@"likes", ^{
-        OhrtLikesLook(model);
+        OhrtLikesTitle(self);
     });
-    return provider;
 }
 %end
 
@@ -80,6 +107,5 @@ void OhrtInstallLikes(void) {
     dispatch_once(&once, ^{
         if (!OhrtFeatureReady(kOhrtLikesKey, @"likes")) return;
         %init(OhrtLikes);
-        OhrtLog(@"likes: counts their owners hid are shown");
     });
 }

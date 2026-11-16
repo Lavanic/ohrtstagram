@@ -42,7 +42,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         OhrtSection(@"Feed", @[
             OhrtRestartSwitch(@"Following feed", @"Home shows only accounts you follow, newest first", kOhrtFollowingFeedKey),
             OhrtRestartSwitch(@"Caught up wall", @"The feed ends where you had caught up to last time", kOhrtWallKey),
-            OhrtRestartSwitch(@"Hidden like counts", @"Shows the count on a post whose owner hid it", kOhrtLikesKey),
+            OhrtRestartSwitch(@"Hidden like counts", @"Open who liked a post that hides its count, and the count shows at the top", kOhrtLikesKey),
         ], @"The wall uses the following feed whether or not that switch is on."),
         OhrtSection(@"Mode", @[
             OhrtRestartSwitch(@"DM mode", @"Opens on your messages, with the home tab hidden", kOhrtDMModeKey),
@@ -57,7 +57,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         ], @"What an account is comes from the app as its profile opens. When you followed each other and how much you have liked and written "
            @"comes from your Insta\u2060gram export, which holds what the app does not, and from what you do here after it was made. "
            @"Stories watched are counted here only, since the export lists too few of them. "
-           @"Every count is of what you did. Tap a profile's line to save its picture. All of it stays on this phone."),
+           @"Every count is of what you did. All of it stays on this phone."),
         OhrtSection(@"Look", @[
             OhrtRestartSwitch(@"ohrtstagram marks", @"Our wordmark at the top of the home feed and our mark on the login screen", kOhrtWordmarkKey),
             OhrtRestartSwitch(@"ohrtstagram in text", @"Buttons, titles and menus say ohrtstagram", kOhrtNameKey),
