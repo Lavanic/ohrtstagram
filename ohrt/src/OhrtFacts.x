@@ -220,110 +220,177 @@ static id OhrtScoreIn(NSDictionary *scores, NSString *pk) {
     return scores[pk] ?: scores[@(pk.longLongValue)];
 }
 
-// The place of `value` among `values` from the highest, and how many there
-// are: "12th of 480".
-static NSString *OhrtPlaceAmong(double value, NSArray *values) {
-    NSUInteger above = 0, total = 0;
-    for (id other in values) {
-        if (![other isKindOfClass:[NSNumber class]]) continue;
-        total++;
-        if ([other doubleValue] > value) above++;
+// A list of scores as Instagram keeps one: how many there are and what they
+// run from and to.
+typedef struct {
+    NSUInteger total;
+    double low, high;
+} OhrtScoreRange;
+
+static OhrtScoreRange OhrtRangeOf(NSDictionary *scores) {
+    OhrtScoreRange range = {0, 0, 0};
+    for (id value in scores.allValues) {
+        if (![value isKindOfClass:[NSNumber class]]) continue;
+        double score = [value doubleValue];
+        if (!range.total || score < range.low) range.low = score;
+        if (!range.total || score > range.high) range.high = score;
+        range.total++;
     }
-    return total ? [NSString stringWithFormat:@"%@ of %lu", OhrtOrdinal(above + 1), (unsigned long)total] : nil;
+    return range;
 }
 
-// Instagram's live ranking of who you are likeliest to message: what its
-// "new message" list (view 3) and share sheet are sorted by. It is worked
-// out on Meta's servers, refreshed by the app, and kept on the phone; a few
-// people the app has just talked to or seen active are boosted on the phone.
-// It is the nearest thing to a closeness the app holds.
-static const long long kOhrtDMRankingView = 3;
+// "3rd of 41 (91/100)": the place of `score` in its list from the highest,
+// and the score, out of a hundred when the whole list lies between 0 and 1
+// and as it is otherwise.
+static NSString *OhrtRankText(double score, NSDictionary *scores) {
+    OhrtScoreRange range = OhrtRangeOf(scores);
+    NSUInteger above = 0;
+    for (id value in scores.allValues) {
+        if ([value isKindOfClass:[NSNumber class]] && [value doubleValue] > score) above++;
+    }
+    NSString *shown = range.total && range.low >= 0 && range.high <= 1 ? [NSString stringWithFormat:@"%.0f/100", score * 100] : [NSString stringWithFormat:@"%.2f", score];
+    if (!range.total) return [NSString stringWithFormat:@"(%@)", shown];
+    return [NSString stringWithFormat:@"%@ of %@ (%@)", OhrtOrdinal(above + 1), OhrtGrouped((long long)range.total), shown];
+}
+
+static NSString *OhrtRangeText(NSString *name, NSDictionary *scores) {
+    OhrtScoreRange range = OhrtRangeOf(scores);
+    return range.total ? [NSString stringWithFormat:@"%@ (%lu, %.4g to %.4g)", name, (unsigned long)range.total, range.low, range.high] : [NSString stringWithFormat:@"%@ (0)", name];
+}
+
+static NSDictionary *OhrtDictionaryCopy(id value) {
+    return [value isKindOfClass:[NSDictionary class]] ? [value copy] : nil;
+}
+
+// Instagram's live rankings of who you are likeliest to message or share
+// with: what its "new message" list, its search for someone to message and
+// its share sheets are sorted by. Each is a list of scores worked out on
+// Meta's servers, refreshed by the app and kept on the phone; a few people
+// the app has just talked to or seen active are boosted on the phone. The
+// lists are tried in this order and the first that has the account is
+// shown, under what that list is for.
+static const struct {
+    long long view;
+    __unsafe_unretained NSString *label;
+} kOhrtLiveViews[] = {
+    {3, @"dm rank"},
+    {4, @"dm search rank"},
+    {1, @"share rank"},
+    {2, @"share rank"},
+    {6, @"share rank"},
+};
 
 static BOOL OhrtAddLiveRanking(NSMutableArray<NSString *> *facts, NSMutableArray<NSString *> *fields, NSString *pk) {
+    // The service swaps in a new set of rankings when it refreshes them, on
+    // a thread of its own, so each part is copied before it is gone through.
     id data = OhrtIvar(OhrtCall(OhrtCurrentSession(), @"rankingService"), "_rankings");
-    NSDictionary *views = OhrtCallValue(data, @"rankingTypesToScores");
-    NSDictionary *entities = OhrtCallValue(data, @"entityIdsToEntities");
-    if (![views isKindOfClass:[NSDictionary class]] || ![entities isKindOfClass:[NSDictionary class]]) return NO;
+    NSDictionary *views = OhrtDictionaryCopy(OhrtCallValue(data, @"rankingTypesToScores"));
+    NSDictionary *entities = OhrtDictionaryCopy(OhrtCallValue(data, @"entityIdsToEntities"));
+    if (!views || !entities) return NO;
     static BOOL described;
     if (!described) {
         described = YES;
         NSMutableArray<NSString *> *seen = [NSMutableArray array];
-        for (id view in views) {
-            NSDictionary *scores = OhrtCallValue(views[view], @"entityIdsToScores");
-            [seen addObject:[NSString stringWithFormat:@"view %@ (%lu)", view, (unsigned long)([scores isKindOfClass:[NSDictionary class]] ? scores.count : 0)]];
-        }
+        for (id view in views) [seen addObject:OhrtRangeText([NSString stringWithFormat:@"view %@", view], OhrtDictionaryCopy(OhrtCallValue(views[view], @"entityIdsToScores")))];
         OhrtLog(@"facts: Instagram's live rankings on the phone are %@, for %lu people and threads", seen.count ? [seen componentsJoinedByString:@", "] : @"none", (unsigned long)entities.count);
     }
-    NSDictionary *scores = OhrtCallValue(views[@(kOhrtDMRankingView)], @"entityIdsToScores");
-    if (![scores isKindOfClass:[NSDictionary class]] || !scores.count) return NO;
-    // The account's entry: a person, or a conversation with only them.
-    id key = nil;
+    // The account's entries: itself as a person, and a conversation with
+    // only it in. A group is never the account's, whoever is left in it.
+    NSMutableArray *keys = [NSMutableArray array];
     for (id entityId in entities) {
         id entity = entities[entityId];
         NSString *found = OhrtText(OhrtCallValue(OhrtIvar(entity, "_user"), @"pk"));
         if (!found) {
-            NSArray *users = OhrtCallValue(OhrtIvar(entity, "_recipient"), @"users");
-            if ([users isKindOfClass:[NSArray class]] && users.count == 1) found = OhrtText(OhrtCallValue(users.firstObject, @"pk"));
+            id recipient = OhrtIvar(entity, "_recipient");
+            NSArray *users = OhrtCallValue(recipient, @"users");
+            if ([users isKindOfClass:[NSArray class]] && users.count == 1 && ![OhrtCallValue(recipient, @"isGroupThread") boolValue]) found = OhrtText(OhrtCallValue(users.firstObject, @"pk"));
         }
-        if ([found isEqualToString:pk] && [scores[entityId] isKindOfClass:[NSNumber class]]) {
-            key = entityId;
-            break;
-        }
+        if ([found isEqualToString:pk]) [keys addObject:entityId];
     }
-    if (!key) return NO;
-    [fields addObject:@"dm_ranking"];
-    double score = [scores[key] doubleValue];
-    NSString *place = OhrtPlaceAmong(score, scores.allValues);
-    [facts addObject:place ? [NSString stringWithFormat:@"dm rank %@ (%.2f)", place, score] : [NSString stringWithFormat:@"dm rank score %.2f", score]];
-    return YES;
+    if (!keys.count) return NO;
+    for (size_t index = 0; index < sizeof(kOhrtLiveViews) / sizeof(kOhrtLiveViews[0]); index++) {
+        NSDictionary *scores = OhrtDictionaryCopy(OhrtCallValue(views[@(kOhrtLiveViews[index].view)], @"entityIdsToScores"));
+        NSNumber *best = nil;
+        for (id key in keys) {
+            id score = scores[key];
+            if ([score isKindOfClass:[NSNumber class]] && (!best || [score doubleValue] > best.doubleValue)) best = score;
+        }
+        if (!best) continue;
+        [fields addObject:[NSString stringWithFormat:@"live_view_%lld", kOhrtLiveViews[index].view]];
+        [facts addObject:[NSString stringWithFormat:@"%@ %@", kOhrtLiveViews[index].label, OhrtRankText(best.doubleValue, scores)]];
+        return YES;
+    }
+    return NO;
 }
 
-// Instagram also keeps on the phone a slower list of scores per account,
-// fetched now and then: one for searching people to message, one for
-// suggesting your close friends list. The server sends the two with the
-// same numbers, so the second is shown only where it differs. They are used
-// when the live ranking has nothing on the account.
-static void OhrtAddRankings(NSMutableArray<NSString *> *facts, NSMutableArray<NSString *> *fields, NSString *pk, BOOL haveLive) {
+// How the stored search list and the stored close friends list compare,
+// worked out again when either is fetched anew.
+static BOOL OhrtStoredListsAgree(NSDictionary *search, NSDictionary *besties) {
+    static __weak NSDictionary *lastSearch, *lastBesties;
+    static BOOL agree, said;
+    if (search == lastSearch && besties == lastBesties) return agree;
+    lastSearch = search;
+    lastBesties = besties;
+    NSUInteger both = 0, equal = 0;
+    double widest = 0;
+    for (id key in search) {
+        id one = search[key], other = besties[key];
+        if (![one isKindOfClass:[NSNumber class]] || ![other isKindOfClass:[NSNumber class]]) continue;
+        both++;
+        double apart = fabs([one doubleValue] - [other doubleValue]);
+        if (apart <= 1e-9) equal++;
+        if (apart > widest) widest = apart;
+    }
+    agree = both > 0 && equal * 100 >= both * 95;
+    if (!said) {
+        said = YES;
+        OhrtLog(@"facts: %lu accounts are in both the stored search and close friends lists, %lu with equal scores, %lu that differ, the widest by %.4g", (unsigned long)both, (unsigned long)equal,
+                (unsigned long)(both - equal), widest);
+    }
+    return agree;
+}
+
+// Instagram also keeps on the phone slower lists of scores per account,
+// fetched now and then: one for suggesting your close friends list, one for
+// searching people to message. The close friends one is always shown. The
+// search one is handed back to go further along the line, and only when no
+// live ranking has the account and the two lists do not say the same thing.
+static NSString *OhrtAddRankings(NSMutableArray<NSString *> *facts, NSMutableArray<NSString *> *fields, NSString *pk, BOOL haveLive) {
     id service = OhrtCall(OhrtCurrentSession(), @"userBootstrapService");
     id surfaces = OhrtCallValue(OhrtIvar(service, "_bootstrap"), @"surfaces");
-    if (![surfaces respondsToSelector:@selector(countByEnumeratingWithState:objects:count:)]) return;
-    NSMutableDictionary<NSString *, id> *byName = [NSMutableDictionary dictionary];
-    for (id surface in (id<NSFastEnumeration>)surfaces) {
+    if ([surfaces isKindOfClass:[NSSet class]]) surfaces = [surfaces allObjects];
+    if (![surfaces isKindOfClass:[NSArray class]]) return nil;
+    NSMutableDictionary<NSString *, NSDictionary *> *byName = [NSMutableDictionary dictionary];
+    for (id surface in (NSArray *)surfaces) {
         NSString *name = OhrtText(OhrtCallValue(surface, @"name"));
-        if (name) byName[name] = surface;
+        NSDictionary *scores = OhrtDictionaryCopy(OhrtIvar(surface, "_scores"));
+        if (name && scores) byName[name] = scores;
     }
-    NSDictionary *search = OhrtIvar(byName[@"coefficient_rank_recipient_user_suggestion"], "_scores");
-    NSDictionary *besties = OhrtIvar(byName[@"coefficient_besties_list_ranking"], "_scores");
     static BOOL described;
     if (!described) {
         described = YES;
         NSMutableArray<NSString *> *seen = [NSMutableArray array];
-        for (NSString *name in byName) {
-            NSDictionary *scores = OhrtIvar(byName[name], "_scores");
-            [seen addObject:[NSString stringWithFormat:@"%@ (%lu)", name, (unsigned long)([scores isKindOfClass:[NSDictionary class]] ? scores.count : 0)]];
-        }
-        BOOL same = [search isKindOfClass:[NSDictionary class]] && [besties isKindOfClass:[NSDictionary class]] && [search isEqualToDictionary:besties];
-        OhrtLog(@"facts: Instagram's stored rankings on the phone are %@; search and close friends are %@", seen.count ? [seen componentsJoinedByString:@", "] : @"none",
-                same ? @"identical" : @"different");
+        for (NSString *name in byName) [seen addObject:OhrtRangeText(name, byName[name])];
+        OhrtLog(@"facts: Instagram's stored rankings on the phone are %@", seen.count ? [seen componentsJoinedByString:@", "] : @"none");
+    }
+    NSDictionary *search = byName[@"coefficient_rank_recipient_user_suggestion"];
+    NSDictionary *besties = byName[@"coefficient_besties_list_ranking"];
+    BOOL agree = search && besties && OhrtStoredListsAgree(search, besties);
+    id bestiesScore = OhrtScoreIn(besties, pk);
+    if ([bestiesScore isKindOfClass:[NSNumber class]]) {
+        [fields addObject:@"coefficient_besties_list_ranking"];
+        [facts addObject:[@"close friends rank " stringByAppendingString:OhrtRankText([bestiesScore doubleValue], besties)]];
     }
     id searchScore = OhrtScoreIn(search, pk);
-    id bestiesScore = OhrtScoreIn(besties, pk);
-    if (!haveLive && [searchScore isKindOfClass:[NSNumber class]]) {
-        [fields addObject:@"coefficient_rank_recipient_user_suggestion"];
-        NSString *place = OhrtPlaceAmong([searchScore doubleValue], search.allValues);
-        [facts addObject:place ? [NSString stringWithFormat:@"dm search rank %@ (%.2f)", place, [searchScore doubleValue]] : [NSString stringWithFormat:@"dm search score %.2f", [searchScore doubleValue]]];
-    }
-    if ([bestiesScore isKindOfClass:[NSNumber class]] && (![searchScore isKindOfClass:[NSNumber class]] || fabs([bestiesScore doubleValue] - [searchScore doubleValue]) > 0.0005)) {
-        [fields addObject:@"coefficient_besties_list_ranking"];
-        NSString *place = OhrtPlaceAmong([bestiesScore doubleValue], besties.allValues);
-        [facts addObject:place ? [NSString stringWithFormat:@"close friends suggestion rank %@ (%.2f)", place, [bestiesScore doubleValue]]
-                               : [NSString stringWithFormat:@"close friends suggestion score %.2f", [bestiesScore doubleValue]]];
-    }
+    if (haveLive || agree || ![searchScore isKindOfClass:[NSNumber class]]) return nil;
+    [fields addObject:@"coefficient_rank_recipient_user_suggestion"];
+    return [@"stored dm search rank " stringByAppendingString:OhrtRankText([searchScore doubleValue], search)];
 }
 
-// The account's story in your tray now, if it has one: whether it is for
-// close friends, which means you are on their list, and the scores
-// Instagram ranked it with in your tray.
+// The account's story in your tray now, if it has one: how likely Instagram
+// reckons you are to tap it, which is one of the scores it ranks the tray
+// with, and whether it is for close friends, which means you are on their
+// list.
 static void OhrtAddTray(NSMutableArray<NSString *> *facts, NSMutableArray<NSString *> *fields, NSString *pk) {
     id map = OhrtCall(OhrtCurrentSession(), @"storyMap");
     SEL stored = NSSelectorFromString(@"storedStoryReelWithPK:");
@@ -331,20 +398,21 @@ static void OhrtAddTray(NSMutableArray<NSString *> *facts, NSMutableArray<NSStri
     id reel = ((id (*)(id, SEL, id))objc_msgSend)(map, stored, pk);
     if (!reel) return;
     [fields addObject:@"tray_reel"];
-    if ([OhrtCallValue(reel, @"hasBestiesMedia") boolValue] && !OhrtActivityCloseFriends(pk)) [facts addObject:@"you're on their close friends (green ring now)"];
     id ranker = OhrtCallValue(reel, @"rankerScores");
-    if (!ranker) return;
-    // What these hold is not yet known: which come, and of what kind, is
-    // logged for the first few before any is shown.
-    static NSUInteger told;
-    if (told >= 4) return;
-    told++;
-    NSMutableArray<NSString *> *kinds = [NSMutableArray array];
-    for (NSString *field in @[ @"bffScores", @"ptap", @"preply", @"plike", @"pcontact", @"preciprocal", @"vm", @"timeSpent" ]) {
-        id value = OhrtCallValue(ranker, field);
-        if (value) [kinds addObject:[NSString stringWithFormat:@"%@ %@", field, NSStringFromClass([value class])]];
+    id tap = OhrtCallValue(ranker, @"ptap");
+    if ([tap isKindOfClass:[NSNumber class]] && [tap doubleValue] >= 0 && [tap doubleValue] <= 1) {
+        [fields addObject:@"ptap"];
+        [facts addObject:[NSString stringWithFormat:@"story tap chance %.0f%%", [tap doubleValue] * 100]];
     }
-    OhrtLog(@"facts: a story in the tray came with ranker scores %@", kinds.count ? [kinds componentsJoinedByString:@", "] : @"empty");
+    if ([OhrtCallValue(reel, @"hasBestiesMedia") boolValue] && !OhrtActivityCloseFriends(pk)) [facts addObject:@"you're on their close friends (green ring now)"];
+    // What "vm" measures is not known, so it is logged for the first few
+    // and not shown.
+    static NSUInteger told;
+    if (!ranker || told >= 6) return;
+    told++;
+    id vm = OhrtCallValue(ranker, @"vm");
+    OhrtLog(@"facts: a story in the tray came with ptap %@, vm %@", [tap isKindOfClass:[NSNumber class]] ? [NSString stringWithFormat:@"%.4g", [tap doubleValue]] : @"none",
+            [vm isKindOfClass:[NSNumber class]] ? [NSString stringWithFormat:@"%.4g", [vm doubleValue]] : @"none");
 }
 
 // A value Instagram's servers name things by, as words on one line.
@@ -372,9 +440,14 @@ static void OhrtFactsSayFields(NSString *pk, NSArray<NSString *> *fields) {
 // it has flagged on the account when it says so.
 static void OhrtAddScores(NSMutableArray<NSString *> *facts, id user, NSString *pk) {
     NSMutableArray<NSString *> *fields = [NSMutableArray array];
-    BOOL live = OhrtAddLiveRanking(facts, fields, pk);
-    OhrtAddRankings(facts, fields, pk, live);
-    OhrtAddTray(facts, fields, pk);
+    // Instagram's own lists are read on their own account: should one of
+    // them change under the reading, the rest of the line still comes.
+    OhrtTry(@"rankings", ^{
+        BOOL live = OhrtAddLiveRanking(facts, fields, pk);
+        NSString *search = OhrtAddRankings(facts, fields, pk, live);
+        OhrtAddTray(facts, fields, pk);
+        if (search) [facts addObject:search];
+    });
 
     id warning = OhrtCallValue(user, @"accountWarning");
     if (warning) {
