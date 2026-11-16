@@ -17,7 +17,6 @@
 # Options:
 #   --ipa <file>          use this IPA instead of looking in packages/
 #   --name <name>         name under the icon            (default: ohrtstagram)
-#   --bundle-id <id>      bundle identifier              (default: dev.ohrt.ohrtstagram)
 #   --icon <png>          app icon                       (default: ohrt/brand/icon-1024.png)
 #   --keep-extensions     leave Instagram's app extensions in. A free Apple
 #                         account cannot sign them, so they are removed by default.
@@ -38,7 +37,12 @@ TOOLCHAIN="$THEOS/toolchain/linux/iphone/bin"
 SDK="iPhoneOS16.2.sdk"
 
 NAME="ohrtstagram"
-BUNDLE_ID="dev.ohrt.ohrtstagram"
+# The bundle id stays Instagram's own. Instagram works out which app it is
+# from it, and from that the name of its app group; under any other id it
+# finds no name, and the sideload fix throws on the missing one as the app
+# launches. SideStore and the like put the team id on the end when they
+# sign, which is enough for it to sit beside the App Store's Instagram.
+BUNDLE_ID="com.burbn.instagram"
 ICON="$ROOT/ohrt/brand/icon-1024.png"
 IPA=""
 KEEP_EXTENSIONS=0
@@ -55,7 +59,6 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --ipa) IPA="${2:?--ipa needs a file}"; shift ;;
         --name) NAME="${2:?--name needs a value}"; shift ;;
-        --bundle-id) BUNDLE_ID="${2:?--bundle-id needs a value}"; shift ;;
         --icon) ICON="${2:?--icon needs a file}"; shift ;;
         --keep-extensions) KEEP_EXTENSIONS=1 ;;
         --flex) WITH_FLEX=1 ;;
@@ -203,7 +206,7 @@ say "Injecting into Instagram $IG_VERSION"
 # Upstream also passes -d, which lists the app's Documents folder in Files
 # and over USB. Without an app group to use, the sideload fix keeps
 # Instagram's shared data in that folder, so it stays closed here.
-FLAGS=(-u -c 9 -n "$NAME" -b "$BUNDLE_ID")
+FLAGS=(-u -c 9 -n "$NAME")
 [ "$KEEP_EXTENSIONS" -eq 1 ] || FLAGS+=(-e)
 INJECT=("$TWEAK")
 [ -z "$FLEX_DYLIB" ] || INJECT+=("$FLEX_DYLIB")
