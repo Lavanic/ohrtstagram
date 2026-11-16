@@ -24,6 +24,10 @@ NSString *const kOhrtWordmarkKey = @"ohrt_wordmark";
 
 static NSString *const kOhrtLaunchBuildKey = @"ohrt_launch_build";
 
+// How much wider than Instagram's own the wordmark is drawn: a little
+// larger than theirs.
+static const CGFloat kOhrtWordmarkGrow = 1.2;
+
 // What the login screen's logo is called in the asset catalog.
 static NSString *const kOhrtLoginLogo = @"Instagram";
 
@@ -96,9 +100,10 @@ static CGRect OhrtInkBounds(UIImage *image) {
 }
 
 // `source` standing in for `theirs`: a picture of the same size, with ours
-// as large as fits inside the part of theirs that is drawn on, and centred
-// there. `what` names it in the log.
-static UIImage *OhrtMarkLike(UIImage *source, UIImage *theirs, BOOL template, NSString *what) {
+// as large as fits inside the part of theirs that is drawn on, times
+// `grow`, and centred there. Grown past theirs, the picture grows with it,
+// evenly on each side. `what` names it in the log.
+static UIImage *OhrtMarkLike(UIImage *source, UIImage *theirs, BOOL template, NSString *what, CGFloat grow) {
     static NSCache *made;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -106,15 +111,18 @@ static UIImage *OhrtMarkLike(UIImage *source, UIImage *theirs, BOOL template, NS
     });
     CGSize canvas = theirs.size;
     if (!source || source.size.width < 1 || source.size.height < 1 || !(canvas.width >= 1 && canvas.height >= 1)) return nil;
-    NSString *key = [NSString stringWithFormat:@"%@ %.2f %.2f %d", what, canvas.width, canvas.height, template];
+    NSString *key = [NSString stringWithFormat:@"%@ %.2f %.2f %d %.2f", what, canvas.width, canvas.height, template, grow];
     UIImage *ours = [made objectForKey:key];
     if (ours) return ours;
 
     CGRect ink = OhrtInkBounds(theirs);
     if (CGRectIsEmpty(ink)) ink = CGRectMake(0, 0, canvas.width, canvas.height);
-    CGFloat fit = MIN(ink.size.width / source.size.width, ink.size.height / source.size.height);
+    CGFloat fit = MIN(ink.size.width / source.size.width, ink.size.height / source.size.height) * grow;
     CGSize size = CGSizeMake(source.size.width * fit, source.size.height * fit);
-    CGRect place = CGRectMake(CGRectGetMidX(ink) - size.width / 2, CGRectGetMidY(ink) - size.height / 2, size.width, size.height);
+    CGSize theirSize = canvas;
+    canvas = CGSizeMake(MAX(theirSize.width, ceil(size.width)), MAX(theirSize.height, ceil(size.height)));
+    CGPoint middle = CGPointMake(CGRectGetMidX(ink) + (canvas.width - theirSize.width) / 2, CGRectGetMidY(ink) + (canvas.height - theirSize.height) / 2);
+    CGRect place = CGRectMake(middle.x - size.width / 2, middle.y - size.height / 2, size.width, size.height);
 
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
     format.opaque = NO;
@@ -126,8 +134,8 @@ static UIImage *OhrtMarkLike(UIImage *source, UIImage *theirs, BOOL template, NS
     if (!ours) return nil;
     objc_setAssociatedObject(ours, &kOhrtOursKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [made setObject:ours forKey:key];
-    OhrtLog(@"brand: the %@ is %.0f by %.0f in theirs of %.0f by %.0f, which is drawn on over %.0f by %.0f", what, size.width, size.height, canvas.width,
-            canvas.height, ink.size.width, ink.size.height);
+    OhrtLog(@"brand: the %@ is %.0f by %.0f in place of theirs of %.0f by %.0f, which is drawn on over %.0f by %.0f", what, size.width, size.height,
+            theirSize.width, theirSize.height, ink.size.width, ink.size.height);
     return ours;
 }
 
@@ -151,7 +159,7 @@ static void OhrtPutWordmark(UIView *header) {
     // No picture means a title is showing in its place.
     if (!shown || objc_getAssociatedObject(shown, &kOhrtOursKey)) return;
     // The button colours the picture, as it does theirs.
-    UIImage *ours = OhrtMarkLike(OhrtWordmarkSource(), shown, YES, @"wordmark");
+    UIImage *ours = OhrtMarkLike(OhrtWordmarkSource(), shown, YES, @"wordmark", kOhrtWordmarkGrow);
     if (!ours) return;
     [button setImage:ours forState:UIControlStateNormal];
     if ([button imageForState:UIControlStateNormal] != ours) {
@@ -218,7 +226,7 @@ static BOOL OhrtLooksBranded(NSString *name) {
     // A logo taller than it is wide is their mark; a wide one is their name.
     BOOL wide = image.size.width > image.size.height * 2;
     BOOL template = wide || image.renderingMode == UIImageRenderingModeAlwaysTemplate;
-    UIImage *ours = OhrtMarkLike(wide ? OhrtWordmarkSource() : OhrtGlyphSource(), image, template, @"login logo");
+    UIImage *ours = OhrtMarkLike(wide ? OhrtWordmarkSource() : OhrtGlyphSource(), image, template, @"login logo", 1);
     return ours ?: image;
 }
 %end
