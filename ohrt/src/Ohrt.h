@@ -53,6 +53,7 @@ FOUNDATION_EXPORT void OhrtInstallWall(void);
 FOUNDATION_EXPORT void OhrtInstallBrand(void);
 FOUNDATION_EXPORT void OhrtInstallName(void);
 FOUNDATION_EXPORT void OhrtInstallFacts(void);
+FOUNDATION_EXPORT void OhrtInstallActivity(void);
 FOUNDATION_EXPORT void OhrtInstallSuggested(void);
 
 // What a feature needs from the Instagram that is running (OhrtNeeds.m).
@@ -91,8 +92,16 @@ FOUNDATION_EXPORT id OhrtCurrentSession(void);
 // an account by username, and about a conversation by the other's name.
 FOUNDATION_EXPORT NSDictionary *OhrtExportPerson(NSString *username);
 FOUNDATION_EXPORT NSDictionary *OhrtExportThread(NSString *fullName);
+FOUNDATION_EXPORT NSTimeInterval OhrtExportDate(void);
 FOUNDATION_EXPORT NSString *OhrtExportStatus(void);
 FOUNDATION_EXPORT void OhrtExportImport(void);
+
+// What has been noted of your doings since (OhrtActivity.x): the day a
+// follow began, and the times of your likes, comments, saves and stories
+// watched, by account id. Main thread.
+FOUNDATION_EXPORT NSNumber *OhrtActivityFollowed(NSString *pk);
+FOUNDATION_EXPORT NSArray<NSNumber *> *OhrtActivityTimes(NSString *pk, NSString *kind);
+FOUNDATION_EXPORT void OhrtActivityListen(void);
 
 // The following feed is on by its own switch, or because the wall needs it.
 FOUNDATION_EXPORT BOOL OhrtFollowingFeedEnabled(void);

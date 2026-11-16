@@ -45,6 +45,13 @@ static void time_budget(void) {
     OhrtAgoText(NAN, ago, sizeof(ago));
     CHECK("not a number is now", strcmp(ago, "now") == 0);
 
+    double noted[] = {100, 250, 300, 900};
+    double latest = -1;
+    CHECK("with no export every note counts", OhrtCountAfter(noted, 4, 0, &latest) == 4 && latest == 900);
+    CHECK("an export counts what came before it", OhrtCountAfter(noted, 4, 250, &latest) == 2 && latest == 900);
+    CHECK("a later export leaves nothing to add", OhrtCountAfter(noted, 4, 900, &latest) == 0 && latest == 0);
+    CHECK("no notes", OhrtCountAfter(noted, 0, 0, &latest) == 0 && latest == 0);
+
     CHECK("the name on its own", OhrtNameStandsAlone(' ', ' ', 'i'));
     CHECK("the name at the start and the end of a text", OhrtNameStandsAlone(' ', ' ', ' '));
     CHECK("the name before a full stop", OhrtNameStandsAlone(' ', '.', ' '));

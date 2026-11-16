@@ -70,6 +70,11 @@ static NSString *OhrtExportDay(NSTimeInterval seconds) {
     return [formatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:seconds]];
 }
 
+// When the export on file was made, in seconds since 1970, or 0 with none.
+NSTimeInterval OhrtExportDate(void) {
+    return [OhrtExport()[@"exported"] doubleValue];
+}
+
 NSString *OhrtExportStatus(void) {
     NSDictionary *export = OhrtExport();
     if (!export) return @"None read in yet";

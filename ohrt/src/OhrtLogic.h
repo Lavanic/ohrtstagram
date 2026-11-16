@@ -53,6 +53,20 @@ static inline void OhrtAgoText(double seconds, char *text, size_t size) {
     else snprintf(text, size, "%ldd ago", (long)(seconds / 86400));
 }
 
+// How many of the times noted for something fall after `after`, which is
+// when the export that already counts the earlier ones was made (0 when
+// there is no export). `latest` is set to the last of those, or 0.
+static inline size_t OhrtCountAfter(const double *times, size_t count, double after, double *latest) {
+    size_t counted = 0;
+    *latest = 0;
+    for (size_t index = 0; index < count; index++) {
+        if (!(times[index] > after)) continue;
+        counted++;
+        if (times[index] > *latest) *latest = times[index];
+    }
+    return counted;
+}
+
 // The app's name in its text
 //
 // Whether "Instagram", found in a piece of text, stands there as the app's
