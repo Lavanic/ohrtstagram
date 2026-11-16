@@ -242,15 +242,16 @@ static OhrtScoreRange OhrtRangeOf(NSDictionary *scores) {
 // "3rd of 41 (91/100)": the place of `score` in its list from the highest,
 // and the score, out of a hundred when the whole list lies between 0 and 1
 // and as it is otherwise.
-static NSString *OhrtRankText(double score, NSDictionary *scores) {
+static NSString *OhrtRankText(double score, NSDictionary *scores, BOOL scoreFirst) {
     OhrtScoreRange range = OhrtRangeOf(scores);
     NSUInteger above = 0;
     for (id value in scores.allValues) {
         if ([value isKindOfClass:[NSNumber class]] && [value doubleValue] > score) above++;
     }
     NSString *shown = range.total && range.low >= 0 && range.high <= 1 ? [NSString stringWithFormat:@"%.0f/100", score * 100] : [NSString stringWithFormat:@"%.2f", score];
-    if (!range.total) return [NSString stringWithFormat:@"(%@)", shown];
-    return [NSString stringWithFormat:@"%@ of %@ (%@)", OhrtOrdinal(above + 1), OhrtGrouped((long long)range.total), shown];
+    if (!range.total) return shown;
+    NSString *place = [NSString stringWithFormat:@"%@ of %@", OhrtOrdinal(above + 1), OhrtGrouped((long long)range.total)];
+    return scoreFirst ? [NSString stringWithFormat:@"%@ (%@)", shown, place] : [NSString stringWithFormat:@"%@ (%@)", place, shown];
 }
 
 static NSString *OhrtRangeText(NSString *name, NSDictionary *scores) {
@@ -273,11 +274,11 @@ static const struct {
     long long view;
     __unsafe_unretained NSString *label;
 } kOhrtLiveViews[] = {
-    {3, @"dm rank"},
-    {4, @"dm search rank"},
-    {1, @"share rank"},
-    {2, @"share rank"},
-    {6, @"share rank"},
+    {3, @"dm_rank"},
+    {4, @"dm_search_rank"},
+    {1, @"share_rank"},
+    {2, @"share_rank"},
+    {6, @"share_rank"},
 };
 
 static BOOL OhrtAddLiveRanking(NSMutableArray<NSString *> *facts, NSMutableArray<NSString *> *fields, NSString *pk) {
@@ -317,7 +318,7 @@ static BOOL OhrtAddLiveRanking(NSMutableArray<NSString *> *facts, NSMutableArray
         }
         if (!best) continue;
         [fields addObject:[NSString stringWithFormat:@"live_view_%lld", kOhrtLiveViews[index].view]];
-        [facts addObject:[NSString stringWithFormat:@"%@ %@", kOhrtLiveViews[index].label, OhrtRankText(best.doubleValue, scores)]];
+        [facts addObject:[NSString stringWithFormat:@"%@ %@", kOhrtLiveViews[index].label, OhrtRankText(best.doubleValue, scores, NO)]];
         return YES;
     }
     return NO;
@@ -379,12 +380,12 @@ static NSString *OhrtAddRankings(NSMutableArray<NSString *> *facts, NSMutableArr
     id bestiesScore = OhrtScoreIn(besties, pk);
     if ([bestiesScore isKindOfClass:[NSNumber class]]) {
         [fields addObject:@"coefficient_besties_list_ranking"];
-        [facts addObject:[@"close friends rank " stringByAppendingString:OhrtRankText([bestiesScore doubleValue], besties)]];
+        [facts addObject:[@"bestie_coefficient " stringByAppendingString:OhrtRankText([bestiesScore doubleValue], besties, YES)]];
     }
     id searchScore = OhrtScoreIn(search, pk);
     if (haveLive || agree || ![searchScore isKindOfClass:[NSNumber class]]) return nil;
     [fields addObject:@"coefficient_rank_recipient_user_suggestion"];
-    return [@"stored dm search rank " stringByAppendingString:OhrtRankText([searchScore doubleValue], search)];
+    return [@"dm_search_coefficient " stringByAppendingString:OhrtRankText([searchScore doubleValue], search, YES)];
 }
 
 // The account's story in your tray now, if it has one: how likely Instagram
@@ -400,9 +401,15 @@ static void OhrtAddTray(NSMutableArray<NSString *> *facts, NSMutableArray<NSStri
     [fields addObject:@"tray_reel"];
     id ranker = OhrtCallValue(reel, @"rankerScores");
     id tap = OhrtCallValue(ranker, @"ptap");
-    if ([tap isKindOfClass:[NSNumber class]] && [tap doubleValue] >= 0 && [tap doubleValue] <= 1) {
+    // The first stories seen all came with the same 0.2115, a default
+    // rather than anything about the person, so a tap chance is shown only
+    // once stories have come with different ones.
+    static NSMutableSet<NSNumber *> *taps;
+    if (!taps) taps = [NSMutableSet set];
+    if ([tap isKindOfClass:[NSNumber class]] && taps.count < 64) [taps addObject:@(llround([tap doubleValue] * 10000))];
+    if ([tap isKindOfClass:[NSNumber class]] && [tap doubleValue] >= 0 && [tap doubleValue] <= 1 && taps.count > 1) {
         [fields addObject:@"ptap"];
-        [facts addObject:[NSString stringWithFormat:@"story tap chance %.0f%%", [tap doubleValue] * 100]];
+        [facts addObject:[NSString stringWithFormat:@"story_tap_chance %.0f%%", [tap doubleValue] * 100]];
     }
     if ([OhrtCallValue(reel, @"hasBestiesMedia") boolValue] && !OhrtActivityCloseFriends(pk)) [facts addObject:@"you're on their close friends (green ring now)"];
     // What "vm" measures is not known, so it is logged for the first few
