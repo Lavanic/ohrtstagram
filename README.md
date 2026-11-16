@@ -1,148 +1,78 @@
-# SCInsta
-A feature-rich tweak for Instagram on iOS!\
-`Version v1.1.1` | `Tested on Instagram 418.2.0`
+<p align="center">
+  <img src=".github/icon.png" width="160" alt="the ohrtstagram icon, a calico jack on Instagram's gradient">
+</p>
 
----
+<p align="center">
+  <img src="https://img.shields.io/badge/Instagram-418.2.0-E4405F?logo=instagram&logoColor=white" alt="Instagram 418.2.0">
+  <img src="https://img.shields.io/badge/iOS-sideloaded%2C%20no%20jailbreak-222?logo=apple&logoColor=white" alt="iOS, sideloaded, no jailbreak">
+  <img src="https://img.shields.io/badge/built%20on-Linux-333?logo=linux&logoColor=white" alt="built on Linux">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License: GPL-3.0"></a>
+</p>
 
-> [!NOTE]
-> ⚙️ &nbsp;To modify SCInsta's settings, check out [this section below](https://github.com/SoCuul/SCInsta#Opening-Tweak-Settings) for help\
-> ❓ &nbsp;If you have any questions or need help with the tweak, visit the [Discussions](https://github.com/SoCuul/SCInsta/discussions) tab
->
-> ✨ &nbsp;If you have a feature request, [click here](https://github.com/SoCuul/SCInsta/issues/new/choose)\
-> 🐛 &nbsp;If you have a bug report, [click here](https://github.com/SoCuul/SCInsta/issues/new/choose)
-> 
+# ohrtstagram
 
----
+Instagram on my phone with the parts I don't want taken out and a few things added. It is the real insta app with a tweak injected into it, built on [SCInsta](https://github.com/SoCuul/SCInsta) and sideloaded with SideStore. No jailbreak.
 
-# Installation
->[!IMPORTANT]
-> Which type of device are you planning on installing this tweak on?
-> - Jailbroken/TrollStore device -> [Download pre-built tweak](https://github.com/SoCuul/SCInsta/releases/latest)
-> - Standard iOS device -> [Visit the wiki to create an IPA file](https://github.com/SoCuul/SCInsta/wiki/Building-IPA)
+Pinned to Instagram 418.2.0. Every hook is checked against that version at build time.
 
-# Features
-### General
-- Hide ads
-- Hide Meta AI
-- Copy description
-- Do not save recent searches
-- Use detailed (native) color picker
-- Enable liquid glass buttons
-- Enable teen app icons
-- IG Notes:
-  - Hide notes tray
-  - Hide friends map
-  - Enable note theming
-  - Custom note themes
-- Focus/Distractions
-  - No suggested users
-  - No suggested chats
-  - Hide trending searches
-  - Hide explore posts grid
+## What it does
 
-### Feed
-- Hide stories tray
-- Hide entire feed
-- No suggested posts
-- No suggested for you (accounts)
-- No suggested reels
-- No suggested threads posts
-- Disable video autoplay
+- **Less junk.** No Reels tab, ads, suggested posts or Meta AI.
+- **A feed that ends.** Once you're caught up, it stops.
+- **Profile facts.** A line on every profile: account id, account type, whether they follow you.
+- **Your history.** Load your Instagram export and that line also shows when you followed each other and how much you've liked, commented, watched and messaged. It keeps counting from there.
 
-### Reels
-- Modify tap controls
-- Always show progress scrubber
-- Disable auto-unmuting reels
-- Confirm reel refresh
-- Hide reels header
-- Hide reels blend button
-- Disable scrolling reels
-- Prevent doom scrolling (limit maximum viewable reels)
+Off by default, and not tried on a phone yet:
 
-### Saving
-- Download feed posts
-- Download reels
-- Download stories
-- Save profile picture
-- *Customize finger count for long-press*
-- *Customize hold time for long-press*
+- **Following feed.** Only people you follow, newest first.
+- **Caught up wall.** The feed stops at the last post you saw.
+- **DM mode.** Opens on messages, hides the home tab.
+- **Time budget.** Covers the app once your minutes for the day are up.
+- **Grayscale.**
+- **Follow back.** Who you follow that doesn't follow you, with an unfollow button on each.
 
-### Stories and messages
-- Keep deleted messages
-- Manually mark messages as seen
-- Disable typing status
-- Unlimited replay of direct stories
-- Disable view-once limitations
-- Disable screenshot detection
-- Disable story seen receipt
-- Disable instants creation
+## Install
 
-### Navigation
-- Modify tab bar icon order
-- Modify swiping between tabs
-- Hiding tabs
-  - Hide feed tab
-  - Hide explore tab
-  - Hide reels tab
-  - Hide create tab
+You need an iPhone, a free Apple account, and a computer once.
 
-### Confirm actions
-- Confirm like: Posts/Stories
-- Confirm like: Reels
-- Confirm follow
-- Confirm repost
-- Confirm call
-- Confirm voice messages
-- Confirm follow requests
-- Confirm shh mode (disappearing messages)
-- Confirm posting comment
-- Confirm changing direct message theme
-- Confirm sticker interaction
+1. **Get the IPA from me.** It isn't in releases because it has Instagram's app in it.
+2. **Install [SideStore](https://sidestore.io).** This is the part that needs the computer.
+3. **Get the IPA onto your phone.** AirDrop or Files.
+4. **Add it.** SideStore, My Apps, the plus, pick the IPA.
+5. **Open it and log in.** It sits next to the real Instagram.
 
-### Optimization
-- Automatically clears unneeded cache folders, reducing the size of your Instagram installation
+On a free Apple account:
 
-# Opening Tweak Settings
+- Apps expire after 7 days. SideStore refreshes them. If it won't open, refresh it there.
+- Three sideloaded apps max, SideStore included.
+- No push notifications.
 
-|                                             |                                             |
-|:-------------------------------------------:|:-------------------------------------------:|
-| <img src="https://i.imgur.com/uPMcugZ.png"> | <img src="https://i.imgur.com/ctIiL7i.png"> |
+To update, add the new IPA the same way. Login and settings stay.
 
-# Building from source
-### Prerequisites
-- XCode + Command-Line Developer Tools
-- [Homebrew](https://brew.sh/#install)
-- [CMake](https://formulae.brew.sh/formula/cmake#default) (`brew install cmake`)
-- [Theos](https://theos.dev/docs/installation)
-- [cyan](https://github.com/asdfzxcvbn/pyzule-rw?tab=readme-ov-file#install-instructions) **\*only required for sideloading**
-- [ipapatch](https://github.com/asdfzxcvbn/ipapatch/releases/latest) **\*only required for sideloading**
+## Settings
 
-### Setup
-1. Install iOS 16.2 frameworks for theos
-   1. [Click to download iOS SDKs](https://github.com/xybp888/iOS-SDKs/archive/refs/heads/master.zip)
-   2. Unzip, then copy the `iPhoneOS16.2.sdk` folder into `~/theos/sdks`
-2. Clone SCInsta repo from GitHub: `git clone --recurse-submodules https://github.com/SoCuul/SCInsta`
-3. **For sideloading**: Download a decrypted Instagram IPA from a trusted source, making sure to rename it to `com.burbn.instagram.ipa`.
-   Then create a folder called `packages` inside of the `SCInsta` folder, and move the Instagram IPA file into it. 
+Hold the three lines at the top right of your profile, or hold four fingers anywhere. Mine are under Focus, SCInsta's are below.
 
-### Run build script
-```sh
-$ chmod +x build.sh
-$ ./build.sh <sideload/rootless/rootful>
-```
+## Your history on a profile
 
-# Contributing
-Contributions to this tweak are greatly appreciated. Feel free to create a pull request if you would like to contribute.
+Instagram's app doesn't know when you followed someone. Your data export does.
 
-If you do not have the technical knowledge to contribute to the codebase, improvements to the documentation are always welcome!
+1. Accounts Center, Your information and permissions, Download your information. Pick JSON.
+2. Download the zip on your phone and tap it in Files to unzip it.
+3. Settings, Focus, Profiles, "Read in an export". Go into the unzipped folder and tap Open.
 
-# Support the project
-SCInsta takes a lot of time to develop, as the Instagram app is ever-changing and difficult to keep up with. Additionally, I'm still a student which doesn't leave me much time to work on this tweak.
+Dates and counts only, and nothing leaves the phone. Every count is something you did, not them.
 
-If you'd like to support my work, you can donate to my [ko-fi page](https://ko-fi.com/socuul)!\
-There's many other ways to support this project however, by simply sharing a link to this tweak with others who would like it!
+## If it won't open
 
-Seeing people use this tweak is what keeps me motivated to keep working on it ❤️
+- Two failed starts in a row and the third opens as plain Instagram. Turn off whatever you changed last.
+- If it's worse than that: iPhone Settings, ohrtstagram, "Start with everything off".
 
-# Credits
-- Huge thanks to [@BandarHL](https://github.com/BandarHL) for creating the original BHInstagram project, which SCInsta is based upon.
+## Credits
+
+- [SCInsta](https://github.com/SoCuul/SCInsta) by SoCuul, the tweak this is built on
+- [zxPluginsInject](https://github.com/asdfzxcvbn/zxPluginsInject) by asdfzxcvbn, keeps a sideloaded copy logged in
+- [InstaSane](https://github.com/n3d1117/InstaSane), where the following feed hook comes from
+- [FLEX](https://github.com/FLEXTool/FLEX), the inspector in debug builds
+
+GPL-3.0, like SCInsta. Not affiliated with Instagram or Meta. Modified apps are against Instagram's rules and can get an account restricted.
