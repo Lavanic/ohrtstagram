@@ -190,9 +190,9 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
     [sections addObject:OhrtSection(nil, @[ OhrtPage(@"Debug", @"ladybug", debug) ], nil)];
 
     [sections addObject:OhrtSection(@"About", @[
-        [SCISetting linkCellWithTitle:@"SCInsta" subtitle:@"The tweak this is built on, by SoCuul"
+        [SCISetting linkCellWithTitle:@"ohrtstagram" subtitle:@"The source, on GitHub"
                                  icon:[SCISymbol symbolWithName:@"chevron.left.forwardslash.chevron.right"]
-                                  url:@"https://github.com/SoCuul/SCInsta"],
+                                  url:@"https://github.com/Lavanic/ohrtstagram"],
     ], [NSString stringWithFormat:@"ohrtstagram %@, a modified SCInsta %@, on Insta\u2060gram %@.\nFree software under the GNU GPL, version 3.",
                                   OHRT_VERSION, SCIVersionString, [SCIUtils IGVersionString]])];
 
