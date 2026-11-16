@@ -21,7 +21,12 @@ FOUNDATION_EXPORT NSString *const kOhrtWallKey;
 
 FOUNDATION_EXPORT BOOL OhrtBool(NSString *key);
 
-#define OhrtLog(format, ...) NSLog(@"[ohrt] " format, ##__VA_ARGS__)
+// Logged as one finished line marked public. The system log blanks out
+// whatever is filled in at run time otherwise, and what these lines fill in
+// (names of classes and feeds, counts) is what makes them worth reading.
+// Nothing that identifies a person goes into one.
+FOUNDATION_EXPORT void OhrtLogText(NSString *text);
+#define OhrtLog(format, ...) OhrtLogText([NSString stringWithFormat:format, ##__VA_ARGS__])
 
 // The launch guard (OhrtGuard.m). OhrtFeature is a switch that also reads
 // as off in safe mode.

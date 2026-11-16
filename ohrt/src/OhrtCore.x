@@ -1,6 +1,7 @@
 // What makes the build ohrtstagram and not stock SCInsta, short of features:
 // its defaults, its first run, and the small helpers the features share.
 #import <objc/message.h>
+#import <os/log.h>
 
 #import "../../src/InstagramHeaders.h"
 #import "../../src/Tweak.h"
@@ -12,6 +13,10 @@ NSString *const kOhrtFollowingFeedKey = @"ohrt_following_feed";
 NSString *const kOhrtWallKey = @"ohrt_wall";
 
 static NSString *const kOhrtWelcomedKey = @"ohrt_welcomed";
+
+void OhrtLogText(NSString *text) {
+    os_log(OS_LOG_DEFAULT, "[ohrt] %{public}s", text.UTF8String ?: "");
+}
 
 BOOL OhrtBool(NSString *key) {
     return [[NSUserDefaults standardUserDefaults] boolForKey:key];
