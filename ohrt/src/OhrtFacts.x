@@ -1,5 +1,5 @@
-// Facts on a profile: a line under the bio, small and red, of what the app
-// holds about the account and does not show.
+// Facts on a profile: a line between the picture and the bio, small and
+// red, of what the app holds about the account and does not show.
 //
 //   id 1234567890, creator, joined 2019-03-02, follows you, followed since 2026-11-16, story 3h ago
 //
@@ -9,9 +9,9 @@
 // happened, so that is our own note, made when a follow button is pressed
 // in this app, and it only knows the follows made here.
 //
-// The line is put into the cell that holds the bio: the cell is made taller
-// by as much as the line needs at the cell's width, wrapped, and the bio is
-// given back the height it asked for.
+// The line is put at the top of the cell that holds the bio: the cell is
+// made taller by as much as the line needs at the cell's width, wrapped,
+// and the bio is moved down by that much and keeps the height it asked for.
 #import <objc/runtime.h>
 
 #import "Ohrt.h"
@@ -19,9 +19,10 @@
 
 NSString *const kOhrtFactsKey = @"ohrt_facts";
 
-// The colour chosen for the line.
-static const uint32_t kOhrtFactsColour = 0xff0349;
-// Between the bio and the line.
+// The colour chosen for the line was #ff0349, then less harsh:
+// this is that red with a third of its strength taken out.
+static const uint32_t kOhrtFactsColour = 0xd9506f;
+// Between the line and the bio.
 static const CGFloat kOhrtFactsGap = 4;
 // A bio section with no bio in it is not inset from the screen's edges, so
 // the line keeps its own distance there.
@@ -41,7 +42,7 @@ static char kOhrtLabelKey;
 @end
 
 static UIFont *OhrtFactsFont(void) {
-    return [UIFont systemFontOfSize:12];
+    return [UIFont systemFontOfSize:11];
 }
 
 // How tall the line is, gap included, wrapped to `width`.
@@ -241,11 +242,14 @@ static void OhrtFactsRefresh(id controller) {
     CGFloat height = MIN(OhrtFactsHeight(label.text, width), bounds.size.height);
     UIView *bio = OhrtIvar(self, "_bioView");
     if ([bio isKindOfClass:[UIView class]]) {
-        CGRect frame = bio.frame;
+        // Instagram has just given the bio the whole cell. It gets the
+        // part under the line, which is the height it asked for.
+        CGRect frame = bounds;
+        frame.origin.y = height;
         frame.size.height = bounds.size.height - height;
         bio.frame = frame;
     }
-    label.frame = CGRectMake(side, bounds.size.height - height + kOhrtFactsGap, width, MAX(0, height - kOhrtFactsGap));
+    label.frame = CGRectMake(side, 0, width, MAX(0, height - kOhrtFactsGap));
 }
 %end
 
