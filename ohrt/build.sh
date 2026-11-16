@@ -110,6 +110,8 @@ if [ "$STOCK" -eq 0 ] && command -v cc >/dev/null; then
         cc -Wall -o "$TESTS/test" "$test" -lm && "$TESTS/test" || die "$test failed"
     done
     rm -rf "$TESTS"
+    python3 ohrt/tests/export_test.py | tail -n 1
+    [ "${PIPESTATUS[0]}" -eq 0 ] || die "ohrt/tests/export_test.py failed"
 fi
 
 if [ "$QUICK" -eq 0 ]; then
