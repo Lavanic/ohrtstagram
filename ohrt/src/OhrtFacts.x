@@ -1,5 +1,5 @@
-// Facts on a profile: one line under the bio, small and blue, of what the
-// app holds about the account and does not show.
+// Facts on a profile: a line under the bio, small and red, of what the app
+// holds about the account and does not show.
 //
 //   id 1234567890, creator, joined 2019-03-02, follows you, followed since 2026-11-16, story 3h ago
 //
@@ -10,7 +10,8 @@
 // in this app, and it only knows the follows made here.
 //
 // The line is put into the cell that holds the bio: the cell is made taller
-// by one line and the bio is given back the height it asked for.
+// by as much as the line needs at the cell's width, wrapped, and the bio is
+// given back the height it asked for.
 #import <objc/runtime.h>
 
 #import "Ohrt.h"
@@ -18,7 +19,13 @@
 
 NSString *const kOhrtFactsKey = @"ohrt_facts";
 
-static const CGFloat kOhrtFactsHeight = 20;
+// The colour chosen for the line.
+static const uint32_t kOhrtFactsColour = 0xff0349;
+// Between the bio and the line.
+static const CGFloat kOhrtFactsGap = 4;
+// A bio section with no bio in it is not inset from the screen's edges, so
+// the line keeps its own distance there.
+static const CGFloat kOhrtFactsSide = 16;
 static const NSTimeInterval kOhrtStoryLife = 24 * 60 * 60;
 
 static char kOhrtLineKey;
@@ -32,6 +39,20 @@ static char kOhrtLabelKey;
 
 @interface IGFollowController : NSObject
 @end
+
+static UIFont *OhrtFactsFont(void) {
+    return [UIFont systemFontOfSize:12];
+}
+
+// How tall the line is, gap included, wrapped to `width`.
+static CGFloat OhrtFactsHeight(NSString *line, CGFloat width) {
+    if (!line.length || !(width >= 40)) return 0;
+    CGRect box = [line boundingRectWithSize:CGSizeMake(width, CGFLOAT_MAX)
+                                    options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
+                                 attributes:@{NSFontAttributeName : OhrtFactsFont()}
+                                    context:nil];
+    return ceil(box.size.height) + kOhrtFactsGap;
+}
 
 static id OhrtIvar(id object, const char *name) {
     Ivar ivar = object ? class_getInstanceVariable([object class], name) : NULL;
@@ -154,11 +175,10 @@ static void OhrtFactsShow(id controller, UICollectionViewCell *cell) {
     UILabel *label = objc_getAssociatedObject(cell, &kOhrtLabelKey);
     if (!label && line) {
         label = [UILabel new];
-        label.font = [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightRegular];
-        label.textColor = OhrtColor(OHRT_BLUE);
-        label.adjustsFontSizeToFitWidth = YES;
-        label.minimumScaleFactor = 0.75;
-        label.lineBreakMode = NSLineBreakByTruncatingTail;
+        label.font = OhrtFactsFont();
+        label.textColor = OhrtColor(kOhrtFactsColour);
+        label.numberOfLines = 0;
+        label.lineBreakMode = NSLineBreakByWordWrapping;
         [cell.contentView addSubview:label];
         objc_setAssociatedObject(cell, &kOhrtLabelKey, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
@@ -192,9 +212,13 @@ static void OhrtFactsRefresh(id controller) {
 }
 - (CGSize)sizeForItemAtIndex:(NSInteger)index {
     CGSize size = %orig;
+    NSString *line = objc_getAssociatedObject(self, &kOhrtLineKey);
     // Only while the line is really being drawn: a cell made taller for a
     // line that never comes would leave a gap.
-    if (objc_getAssociatedObject(self, &kOhrtLineKey) && OhrtTry(@"facts", ^{})) size.height += kOhrtFactsHeight;
+    if (!line || !OhrtTry(@"facts", ^{})) return size;
+    // With no bio the section is not inset, and the line insets itself.
+    CGFloat width = size.height < 1 ? size.width - 2 * kOhrtFactsSide : size.width;
+    size.height += OhrtFactsHeight(line, width);
     return size;
 }
 - (id)cellForItemAtIndex:(NSInteger)index {
@@ -212,15 +236,16 @@ static void OhrtFactsRefresh(id controller) {
     UILabel *label = objc_getAssociatedObject(self, &kOhrtLabelKey);
     if (!label || label.hidden) return;
     CGRect bounds = self.contentView.bounds;
+    CGFloat side = self.frame.origin.x < 8 ? kOhrtFactsSide : 0;
+    CGFloat width = MAX(0, bounds.size.width - 2 * side);
+    CGFloat height = MIN(OhrtFactsHeight(label.text, width), bounds.size.height);
     UIView *bio = OhrtIvar(self, "_bioView");
     if ([bio isKindOfClass:[UIView class]]) {
         CGRect frame = bio.frame;
-        frame.size.height = MAX(0, bounds.size.height - kOhrtFactsHeight);
+        frame.size.height = bounds.size.height - height;
         bio.frame = frame;
     }
-    // A bio section with no bio is not inset from the screen's edges.
-    CGFloat side = self.frame.origin.x < 8 ? 16 : 0;
-    label.frame = CGRectMake(side, bounds.size.height - kOhrtFactsHeight + 3, MAX(0, bounds.size.width - 2 * side), kOhrtFactsHeight - 3);
+    label.frame = CGRectMake(side, bounds.size.height - height + kOhrtFactsGap, width, MAX(0, height - kOhrtFactsGap));
 }
 %end
 
