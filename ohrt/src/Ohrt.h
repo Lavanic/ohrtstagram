@@ -61,8 +61,16 @@ FOUNDATION_EXPORT void OhrtInstallMessages(void);
 FOUNDATION_EXPORT void OhrtInstallLikes(void);
 FOUNDATION_EXPORT void OhrtInstallPostFacts(void);
 // The like count of a post that hides it, as counted from who liked it
-// (OhrtLikes.x), such as "1,234 likes", or nil until that list is opened.
+// (OhrtLikes.x), such as "1,234 likes", or nil until that has been read.
+// OhrtLikesWant asks for it to be read; when it has been, or could not be,
+// kOhrtLikesCountedNotification is posted on the main thread with the
+// post's id as its object.
+FOUNDATION_EXPORT NSString *OhrtMediaId(id media);
 FOUNDATION_EXPORT NSString *OhrtLikesCounted(id media);
+FOUNDATION_EXPORT NSString *OhrtLikesCountedFor(NSString *mediaId);
+FOUNDATION_EXPORT void OhrtLikesWant(id media);
+FOUNDATION_EXPORT BOOL OhrtLikesPending(NSString *mediaId);
+FOUNDATION_EXPORT NSString *const kOhrtLikesCountedNotification;
 
 // The small red text of the facts lines (OhrtFacts.x), on a profile and
 // under a post.

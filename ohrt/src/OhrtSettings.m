@@ -42,7 +42,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         OhrtSection(@"Feed", @[
             OhrtRestartSwitch(@"Following feed", @"Home shows only accounts you follow, newest first", kOhrtFollowingFeedKey),
             OhrtRestartSwitch(@"Caught up wall", @"The feed ends where you had caught up to last time", kOhrtWallKey),
-            OhrtRestartSwitch(@"Hidden like counts", @"Open who liked a post that hides its count, and the count shows at the top", kOhrtLikesKey),
+            OhrtRestartSwitch(@"Hidden like counts", @"Counts who liked a post that hides its count, a few seconds apart, and shows it under the post", kOhrtLikesKey),
         ], @"The wall uses the following feed whether or not that switch is on."),
         OhrtSection(@"Mode", @[
             OhrtRestartSwitch(@"DM mode", @"Opens on your messages, with the home tab hidden", kOhrtDMModeKey),

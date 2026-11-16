@@ -72,6 +72,10 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("likes", "IGUserListNetworkDataSource", "numberOfResults"),
     OHRT_NEED("likes", "IGUserListNetworkDataSource", "totalUsersCount"),
     OHRT_NEED("likes", "IGUserListNetworkDataSource", "moreAvailable"),
+    OHRT_NEED("likes", "IGUserListNetworkDataSource", "initWithUserSession:fetchPath:endpointLoggingIdentifier:"),
+    OHRT_NEED("likes", "IGUserListNetworkDataSource", "setDelegate:"),
+    OHRT_NEED("likes", "IGUserListNetworkDataSource", "fetchData"),
+    OHRT_NEED("likes", "IGMedia", "mediaID"),
 
     OHRT_NEED("postfacts", "IGFeedItemTimelineViewModelImpl", "initWithMedia:configuration:feedConfiguration:userSession:showAYMFCellBelowHeader:showInlineComposer:showRowStyleCTA:isDelayedRowCTAVisible:showWYTSurvey:isMLEXPreview:coauthorRowType:shouldShowAdsFeedbackInterface:shouldShowAdsFeedbackInterfaceRepetition:afiInterestsPickerState:leadGenInterestPickerCellViewState:shouldShowInjectedFeedUnit:shouldShowInlineCommentPreview:shouldLogRowTypes:shouldHideHeaderRow:shouldShowOnImpressionControl:showDelaySkipAdNUX:isFloatingSocialContextDismissed:shouldExpandCTAVertically:showDelaySkipAdPersistentTombstone:shouldShowHIDEntryPoint:shouldShowChainingTopicTray:shouldShowSponsoredLabelInFooter:shouldRenderDestinationInfoAttachement:commercePageEligibleModules:"),
     OHRT_NEED("postfacts", "IGFeedItemTimelineViewModelImpl", "rowItems"),

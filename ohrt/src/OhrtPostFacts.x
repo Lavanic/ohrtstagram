@@ -169,12 +169,6 @@ static NSString *OhrtPostText(id media) {
 
     if ([OhrtPostNumber(OhrtCallValue(media, @"hasSharedToFb")) integerValue] > 0) [facts addObject:@"also on facebook"];
 
-    // A shown like count is Instagram's own. A hidden one comes as a
-    // stand-in, so only a count made from who liked it is used.
-    if ([OhrtPostNumber(OhrtCallValue(media, @"likeAndViewCountsDisabled")) boolValue]) {
-        NSString *counted = OhrtLikesCounted(media);
-        if (counted) [facts addObject:[counted stringByAppendingString:@", counted from who liked it"]];
-    }
     NSArray<NSArray *> *counts = @[
         @[ @"igPlayCount", @"play", @"plays" ],
         @[ @"viewCount", @"view", @"views" ],
@@ -222,6 +216,22 @@ static CGFloat OhrtPostSide(void) {
     return gOhrtPostSide;
 }
 
+// What our row shows: the facts made with it, after a hidden like count
+// once it has been counted from who liked the post (OhrtLikes.x), which
+// can happen while the row is on screen.
+static char kOhrtRowMediaKey;
+static char kOhrtRowHiddenKey;
+
+static NSString *OhrtPostShown(id row) {
+    NSString *base = OhrtPostString(OhrtCall(row, @"value"));
+    if (![objc_getAssociatedObject(row, &kOhrtRowHiddenKey) boolValue]) return base;
+    NSString *mediaId = objc_getAssociatedObject(row, &kOhrtRowMediaKey);
+    NSString *counted = OhrtLikesCountedFor(mediaId);
+    NSString *likes = counted ? [counted stringByAppendingString:@" (hidden), counted from who liked it"] : OhrtLikesPending(mediaId) ? @"counting hidden likes\u2026" : nil;
+    if (!likes) return base;
+    return base.length ? [NSString stringWithFormat:@"%@, %@", likes, base] : likes;
+}
+
 static CGFloat OhrtPostTextHeight(NSString *text, CGFloat width) {
     if (!text.length || !(width >= 40)) return 0;
     static NSCache<NSString *, NSNumber *> *heights;
@@ -244,7 +254,13 @@ static CGFloat OhrtPostTextHeight(NSString *text, CGFloat width) {
 
 @interface OhrtPostFactsCell : UICollectionViewCell
 @property (nonatomic, strong) UILabel *label;
+@property (nonatomic, copy) NSString *mediaId;
+@property (nonatomic, strong) id row;
+@property (nonatomic, weak) id controller;
 @end
+
+// Cells on screen, to update when a hidden like count comes in.
+static NSHashTable<OhrtPostFactsCell *> *gOhrtPostCells;
 
 @implementation OhrtPostFactsCell
 
@@ -310,18 +326,24 @@ static void OhrtPostAddRow(id model, id media) {
         return;
     }
     NSString *text = OhrtPostText(media);
-    if (!text.length) return;
+    BOOL hidden = [OhrtPostNumber(OhrtCallValue(media, @"likeAndViewCountsDisabled")) boolValue];
+    if (!text.length && !hidden) return;
     SEL make = NSSelectorFromString(@"initWithType:textType:value:");
     if (![rowClass instancesRespondToSelector:make]) return;
-    id ours = ((id (*)(id, SEL, int, long long, id))objc_msgSend)([rowClass alloc], make, kOhrtPostFactsRow, kOhrtNoText, text);
+    id ours = ((id (*)(id, SEL, int, long long, id))objc_msgSend)([rowClass alloc], make, kOhrtPostFactsRow, kOhrtNoText, text ?: @"");
     if (!ours) return;
+    if (hidden) {
+        objc_setAssociatedObject(ours, &kOhrtRowHiddenKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(ours, &kOhrtRowMediaKey, OhrtMediaId(media), OBJC_ASSOCIATION_COPY_NONATOMIC);
+        OhrtLikesWant(media);
+    }
     NSMutableArray *with = [rows mutableCopy];
     [with insertObject:ours atIndex:buttons + 1];
     object_setIvarWithStrongDefault(model, ivar, [with copy]);
     static BOOL said;
     if (!said) {
         said = YES;
-        OhrtLog(@"post facts: %lu facts go in at row %lu of %lu", (unsigned long)[text componentsSeparatedByString:@", "].count, (unsigned long)(buttons + 1), (unsigned long)rows.count);
+        OhrtLog(@"post facts: %lu facts go in at row %lu of %lu", (unsigned long)(text.length ? [text componentsSeparatedByString:@", "].count : 0), (unsigned long)(buttons + 1), (unsigned long)rows.count);
     }
 }
 
@@ -347,7 +369,7 @@ static void OhrtPostAddRow(id model, id media) {
     });
     if (!row) return %orig;
     CGFloat width = OhrtPostWidth(self);
-    CGFloat height = OhrtPostTextHeight(OhrtPostString(OhrtCall(row, @"value")), width - 2 * OhrtPostSide());
+    CGFloat height = OhrtPostTextHeight(OhrtPostShown(row), width - 2 * OhrtPostSide());
     return CGSizeMake(width, height > 0 ? kOhrtPostAbove + height + kOhrtPostBelow : 0.01);
 }
 
@@ -362,7 +384,12 @@ static void OhrtPostAddRow(id model, id media) {
     if (![context respondsToSelector:dequeue]) return %orig;
     OhrtPostFactsCell *cell = ((id (*)(id, SEL, Class, id, NSInteger))objc_msgSend)(context, dequeue, [OhrtPostFactsCell class], self, index);
     if ([cell isKindOfClass:[OhrtPostFactsCell class]]) {
-        cell.label.text = OhrtPostString(OhrtCall(row, @"value"));
+        cell.label.text = OhrtPostShown(row);
+        cell.row = row;
+        cell.mediaId = objc_getAssociatedObject(row, &kOhrtRowMediaKey);
+        cell.controller = self;
+        if (!gOhrtPostCells) gOhrtPostCells = [NSHashTable weakObjectsHashTable];
+        [gOhrtPostCells addObject:cell];
         [cell setNeedsLayout];
     }
     return cell;
@@ -404,5 +431,19 @@ void OhrtInstallPostFacts(void) {
     dispatch_once(&once, ^{
         if (!OhrtFeatureReady(kOhrtPostFactsKey, @"postfacts")) return;
         %init(OhrtPostFacts);
+        // Posted on the main thread by OhrtLikes.x.
+        [[NSNotificationCenter defaultCenter] addObserverForName:kOhrtLikesCountedNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
+            OhrtTry(@"post facts", ^{
+                for (OhrtPostFactsCell *cell in gOhrtPostCells.allObjects) {
+                    if (!cell.mediaId || ![cell.mediaId isEqual:note.object]) continue;
+                    cell.label.text = OhrtPostShown(cell.row);
+                    [cell setNeedsLayout];
+                    id controller = cell.controller;
+                    id context = OhrtCall(controller, @"collectionContext");
+                    SEL invalidate = NSSelectorFromString(@"invalidateLayoutForSectionController:completion:");
+                    if ([context respondsToSelector:invalidate]) ((void (*)(id, SEL, id, id))objc_msgSend)(context, invalidate, controller, nil);
+                }
+            });
+        }];
     });
 }
