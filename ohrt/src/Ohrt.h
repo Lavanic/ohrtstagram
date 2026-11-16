@@ -66,6 +66,11 @@ FOUNDATION_EXPORT void OhrtInstallPostFacts(void);
 FOUNDATION_EXPORT UIFont *OhrtFactsLineFont(void);
 FOUNDATION_EXPORT UIColor *OhrtFactsLineColour(void);
 
+// What has changed on a profile since you last opened it (OhrtLooks.m), as
+// facts for its line. Notes what it says now. Main thread.
+FOUNDATION_EXPORT NSArray<NSString *> *OhrtLookedChanges(id user, NSString *pk);
+FOUNDATION_EXPORT void OhrtLooksSaveNow(void);
+
 // What a feature needs from the Instagram that is running (OhrtNeeds.m).
 FOUNDATION_EXPORT NSString *OhrtMissing(NSString *feature);
 FOUNDATION_EXPORT BOOL OhrtAvailable(NSString *feature);
@@ -118,6 +123,9 @@ FOUNDATION_EXPORT void OhrtActivityListen(void);
 // When the notes were begun, in seconds since 1970: what they count is
 // counted from then. 0 while it is not known who is signed in.
 FOUNDATION_EXPORT NSTimeInterval OhrtActivityBegan(void);
+// When you were last shown a story of `pk`'s that was for their close
+// friends, or nil.
+FOUNDATION_EXPORT NSNumber *OhrtActivityCloseFriends(NSString *pk);
 // Messages with the account `pk`, read off a conversation that belongs to
 // the account `viewer` (OhrtMessages.x): for each its time in milliseconds
 // since 1970 and its id as a number. Those not noted before are. Main

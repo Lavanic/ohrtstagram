@@ -9,7 +9,9 @@
 //    session to whoever has asked to hear;
 //  - every like of a post goes through one method on the post;
 //  - a story counts as seen where the story viewer marks it seen, and as
-//    liked where the viewer sends the like.
+//    liked where the viewer sends the like. A story seen that was for its
+//    owner's close friends means you are on their list, and the day is
+//    noted.
 // Messages are kept here too, but are not noted as they are sent: they are
 // read off the conversations (OhrtMessages.x), so that what arrives counts
 // as well as what is sent.
@@ -25,6 +27,7 @@
 #import "OhrtLogic.h"
 
 static NSString *const kOhrtFollowedKind = @"followed";
+static NSString *const kOhrtCloseFriendsKind = @"close_friends";
 static NSString *const kOhrtMessageStamps = @"messages_ms";
 static NSString *const kOhrtMessageIds = @"messages_id";
 
@@ -143,8 +146,9 @@ static void OhrtNoteOnMain(NSString *kind, NSString *pk, BOOL happened) {
     NSMutableDictionary *person = OhrtNotesPerson(pk, happened);
     if (!person) return;
     NSNumber *now = @((long long)[NSDate date].timeIntervalSince1970);
-    if ([kind isEqualToString:kOhrtFollowedKind]) {
-        // One day per account: when the follow that stands began.
+    if ([kind isEqualToString:kOhrtFollowedKind] || [kind isEqualToString:kOhrtCloseFriendsKind]) {
+        // One day per account: when the follow that stands began, or when
+        // a close friends story was last seen.
         if (happened) person[kind] = now;
         else [person removeObjectForKey:kind];
     } else {
@@ -176,6 +180,11 @@ static void OhrtNote(NSString *kind, id account, BOOL happened) {
 
 NSNumber *OhrtActivityFollowed(NSString *pk) {
     id when = OhrtNotesPerson(pk, NO)[kOhrtFollowedKind];
+    return [when isKindOfClass:[NSNumber class]] ? when : nil;
+}
+
+NSNumber *OhrtActivityCloseFriends(NSString *pk) {
+    id when = OhrtNotesPerson(pk, NO)[kOhrtCloseFriendsKind];
     return [when isKindOfClass:[NSNumber class]] ? when : nil;
 }
 
@@ -395,7 +404,16 @@ static void OhrtListen(void) {
     if (!media.length || [seen containsObject:media]) return;
     if (seen.count > 4000) [seen removeAllObjects];
     [seen addObject:media];
-    OhrtNote(@"stories_seen", OhrtCall(item, @"user"), YES);
+    id owner = OhrtCall(item, @"user");
+    OhrtNote(@"stories_seen", owner, YES);
+    // Instagram's word for a story only close friends are shown.
+    id audience = OhrtCallValue(item, @"audience") ?: OhrtCallValue(OhrtCall(item, @"media"), @"audience");
+    static BOOL said;
+    if (!said) {
+        said = YES;
+        OhrtLog(@"activity: stories come %@", [audience isKindOfClass:[NSString class]] ? @"saying who they were for" : @"without saying who they were for");
+    }
+    if ([audience isKindOfClass:[NSString class]] && [[audience lowercaseString] isEqualToString:@"besties"]) OhrtNote(kOhrtCloseFriendsKind, owner, YES);
 }
 %end
 

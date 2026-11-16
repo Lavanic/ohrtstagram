@@ -48,7 +48,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
             OhrtRestartSwitch(@"DM mode", @"Opens on your messages, with the home tab hidden", kOhrtDMModeKey),
         ], nil),
         OhrtSection(@"Facts", @[
-            OhrtRestartSwitch(@"Facts on a profile", @"Above a profile's buttons: the account's id and kind, and your history with it", kOhrtFactsKey),
+            OhrtRestartSwitch(@"Facts on a profile", @"Above a profile's buttons: the account's id and kind, what changed since you last looked, and your history with it", kOhrtFactsKey),
             OhrtRestartSwitch(@"Facts on a post", @"Under a post's buttons: when it was made and posted, exact counts, and what Insta\u2060gram's AI sees in it", kOhrtPostFactsKey),
             [SCISetting staticCellWithTitle:@"Your export" subtitle:OhrtExportStatus() icon:nil],
             [SCISetting buttonCellWithTitle:@"Read in an export" subtitle:@"Unpack its zip in Files, then pick the folder" icon:nil action:^{
@@ -57,7 +57,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         ], @"What an account is comes from the app as its profile opens. When you followed each other and how much you have liked and written "
            @"comes from your Insta\u2060gram export, which holds what the app does not, and from what you do here after it was made. "
            @"Stories watched are counted here only, since the export lists too few of them. "
-           @"Every count is of what you did. All of it stays on this phone."),
+           @"Every count is of what you did. Tap a profile's line to save its picture. All of it stays on this phone."),
         OhrtSection(@"Look", @[
             OhrtRestartSwitch(@"ohrtstagram marks", @"Our wordmark at the top of the home feed and our mark on the login screen", kOhrtWordmarkKey),
             OhrtRestartSwitch(@"ohrtstagram in text", @"Buttons, titles and menus say ohrtstagram", kOhrtNameKey),
