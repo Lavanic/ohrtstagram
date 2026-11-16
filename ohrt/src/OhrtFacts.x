@@ -7,8 +7,9 @@
 //
 // There are two sources, and nothing is asked of Instagram for either. The
 // first is what the app already holds when a profile opens: the id, the
-// kind of account, whether it follows you, its latest story, and the scores
-// and flags Instagram keeps on it, each only when the server sent it. The
+// kind of account, whether it follows you, its latest story, where it sits
+// in the rankings Instagram keeps on the phone, and any flag Instagram sent
+// on it. The
 // second is your own history with the account, which Instagram's app does
 // not hold: when each follow began, and how much you have liked, commented,
 // watched and written. Every count is of what you did, never of what they did. It
@@ -206,6 +207,84 @@ static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString 
     }
 }
 
+// "1st", "2nd", "12th".
+static NSString *OhrtOrdinal(NSUInteger number) {
+    NSUInteger tens = number % 100, ones = number % 10;
+    NSString *suffix = (tens >= 11 && tens <= 13) ? @"th" : ones == 1 ? @"st" : ones == 2 ? @"nd" : ones == 3 ? @"rd" : @"th";
+    return [NSString stringWithFormat:@"%lu%@", (unsigned long)number, suffix];
+}
+
+// The account's key in Instagram's own lists: its id, as text or a number.
+static id OhrtScoreIn(NSDictionary *scores, NSString *pk) {
+    if (![scores isKindOfClass:[NSDictionary class]] || !pk.length) return nil;
+    return scores[pk] ?: scores[@(pk.longLongValue)];
+}
+
+// Instagram keeps on the phone its own ranking of the accounts it might put
+// in front of you: who to suggest as you start a message, who to suggest
+// for your close friends list, who to suggest you share with. Each is a
+// score per account, worked out on its servers from how much you have to
+// do with each other, which is what its ranking explainer calls closeness.
+// This account's score and its place in each list are shown. Nothing is
+// asked of Instagram for it.
+static void OhrtAddRankings(NSMutableArray<NSString *> *facts, NSMutableArray<NSString *> *fields, NSString *pk) {
+    id service = OhrtCall(OhrtCurrentSession(), @"userBootstrapService");
+    id surfaces = OhrtCallValue(OhrtIvar(service, "_bootstrap"), @"surfaces");
+    if (![surfaces respondsToSelector:@selector(countByEnumeratingWithState:objects:count:)]) return;
+    static BOOL described;
+    NSMutableArray<NSString *> *seen = described ? nil : [NSMutableArray array];
+    NSDictionary<NSString *, NSString *> *labels = @{
+        @"coefficient_direct_recipients_ranking" : @"dm",
+        @"coefficient_besties_list_ranking" : @"close friends",
+        @"coefficient_rank_recipient_user_suggestion" : @"share",
+    };
+    for (id surface in (id<NSFastEnumeration>)surfaces) {
+        NSString *name = OhrtText(OhrtCallValue(surface, @"name"));
+        NSDictionary *scores = OhrtIvar(surface, "_scores");
+        NSArray *sorted = OhrtIvar(surface, "_keysSortedByScore");
+        if (seen && name) [seen addObject:[NSString stringWithFormat:@"%@ (%lu)", name, (unsigned long)([scores isKindOfClass:[NSDictionary class]] ? scores.count : 0)]];
+        NSString *label = labels[name ?: @""];
+        id score = OhrtScoreIn(scores, pk);
+        if (!label || ![score isKindOfClass:[NSNumber class]]) continue;
+        [fields addObject:name];
+        NSString *text = [NSString stringWithFormat:@"%@ closeness %.2f", label, [score doubleValue]];
+        NSUInteger place = [sorted isKindOfClass:[NSArray class]] ? [sorted indexOfObject:pk] : NSNotFound;
+        if (place == NSNotFound && [sorted isKindOfClass:[NSArray class]]) place = [sorted indexOfObject:@(pk.longLongValue)];
+        if (place != NSNotFound) text = [text stringByAppendingFormat:@" (%@ of %lu)", OhrtOrdinal(place + 1), (unsigned long)sorted.count];
+        [facts addObject:text];
+    }
+    if (seen) {
+        described = YES;
+        OhrtLog(@"facts: Instagram's own rankings on the phone are %@", seen.count ? [seen componentsJoinedByString:@", "] : @"none");
+    }
+}
+
+// The account's story in your tray now, if it has one: whether it is for
+// close friends, which means you are on their list, and the scores
+// Instagram ranked it with in your tray.
+static void OhrtAddTray(NSMutableArray<NSString *> *facts, NSMutableArray<NSString *> *fields, NSString *pk) {
+    id map = OhrtCall(OhrtCurrentSession(), @"storyMap");
+    SEL stored = NSSelectorFromString(@"storedStoryReelWithPK:");
+    if (![map respondsToSelector:stored]) return;
+    id reel = ((id (*)(id, SEL, id))objc_msgSend)(map, stored, pk);
+    if (!reel) return;
+    [fields addObject:@"tray_reel"];
+    if ([OhrtCallValue(reel, @"hasBestiesMedia") boolValue] && !OhrtActivityCloseFriends(pk)) [facts addObject:@"you're on their close friends (green ring now)"];
+    id ranker = OhrtCallValue(reel, @"rankerScores");
+    if (!ranker) return;
+    // What these hold is not yet known: which come, and of what kind, is
+    // logged for the first few before any is shown.
+    static NSUInteger told;
+    if (told >= 4) return;
+    told++;
+    NSMutableArray<NSString *> *kinds = [NSMutableArray array];
+    for (NSString *field in @[ @"bffScores", @"ptap", @"preply", @"plike", @"pcontact", @"preciprocal", @"vm", @"timeSpent" ]) {
+        id value = OhrtCallValue(ranker, field);
+        if (value) [kinds addObject:[NSString stringWithFormat:@"%@ %@", field, NSStringFromClass([value class])]];
+    }
+    OhrtLog(@"facts: a story in the tray came with ranker scores %@", kinds.count ? [kinds componentsJoinedByString:@", "] : @"empty");
+}
+
 // A value Instagram's servers name things by, as words on one line.
 static NSString *OhrtFactsWords(id value) {
     if ([value isKindOfClass:[NSNumber class]]) return [value stringValue];
@@ -216,55 +295,27 @@ static NSString *OhrtFactsWords(id value) {
     return text.length ? text : nil;
 }
 
-static BOOL OhrtFactsTrue(id value) {
-    return [value isKindOfClass:[NSNumber class]] && [value boolValue];
-}
-
-static NSString *OhrtFactsScore(NSString *label, id value) {
-    if (![value isKindOfClass:[NSNumber class]] || [value doubleValue] == 0) return nil;
-    return [NSString stringWithFormat:fabs([value doubleValue]) >= 0.005 ? @"%@ %.2f" : @"%@ %.2g", label, [value doubleValue]];
-}
-
 // Which of these came with the first few profiles, by field name only.
 static void OhrtFactsSayFields(NSString *pk, NSArray<NSString *> *fields) {
     static NSMutableSet<NSString *> *told;
     if (!told) told = [NSMutableSet set];
     if (told.count >= 8 || [told containsObject:pk]) return;
     [told addObject:pk];
-    OhrtLog(@"facts: a profile came with %@", fields.count ? [fields componentsJoinedByString:@" "] : @"none of the score and flag fields");
+    OhrtLog(@"facts: a profile came with %@", fields.count ? [fields componentsJoinedByString:@" "] : @"none of the ranking and flag fields");
 }
 
 // What Instagram itself holds about an account that is not your own and
-// does not show: how close it reckons you are, what it has flagged, where
-// it places the account. Each is shown under the server's own name for it,
-// since what goes into a score is not known here.
+// does not show: how close it reckons you are, from the rankings it keeps
+// on the phone, and what it has flagged on the account when it says so.
 static void OhrtAddScores(NSMutableArray<NSString *> *facts, id user, NSString *pk) {
     NSMutableArray<NSString *> *fields = [NSMutableArray array];
-
-    // -[IGUser bffScore] is this same number.
-    NSString *closeness = OhrtFactsScore(@"closeness", OhrtCallValue(user, @"closenessScore"));
-    if (closeness) {
-        [fields addObject:@"closeness_score"];
-        [facts addObject:closeness];
-    }
-    NSString *coeff = OhrtFactsScore(@"coeff weight", OhrtCallValue(user, @"coeffWeight"));
-    if (coeff) {
-        [fields addObject:@"coeff_weight"];
-        [facts addObject:coeff];
-    }
-
-    id scammer = OhrtCallValue(user, @"isPossibleScammer");
-    if (scammer) [fields addObject:@"is_possible_scammer"];
-    id actor = OhrtCallValue(user, @"isPossibleBadActor");
-    if (actor) [fields addObject:@"is_possible_bad_actor"];
-    if (OhrtFactsTrue(scammer) || OhrtFactsTrue(OhrtCallValue(actor, @"isPossibleScammer"))) [facts addObject:@"flagged possible scammer"];
-    if (OhrtFactsTrue(OhrtCallValue(actor, @"isPossibleImpersonator"))) [facts addObject:@"flagged possible impersonator"];
+    OhrtAddRankings(facts, fields, pk);
+    OhrtAddTray(facts, fields, pk);
 
     id warning = OhrtCallValue(user, @"accountWarning");
     if (warning) {
-        id harm = OhrtCallValue(warning, @"harmType");
-        [fields addObject:[NSString stringWithFormat:@"account_warning(harm_type %@)", [harm isKindOfClass:[NSString class]] ? @"text" : [harm isKindOfClass:[NSNumber class]] ? @"number" : @"none"]];
-        NSString *kind = OhrtFactsWords(harm);
+        [fields addObject:@"account_warning"];
+        NSString *kind = OhrtFactsWords(OhrtCallValue(warning, @"harmType"));
         [facts addObject:kind ? [@"account warning " stringByAppendingString:kind] : @"account warning"];
     }
 
@@ -277,31 +328,7 @@ static void OhrtAddScores(NSMutableArray<NSString *> *facts, id user, NSString *
         NSString *name = OhrtFactsWords(OhrtCallValue(tool, @"displayName")) ?: OhrtFactsWords(OhrtCallValue(tool, @"toolType"));
         [facts addObject:name ? [NSString stringWithFormat:@"ai-made picture (%@)", name] : @"ai-made picture"];
     }
-
-    // Sent about someone asking to follow a supervised account, as far as
-    // is known, so it is rare.
-    id country = OhrtCallValue(OhrtCallValue(user, @"ukTeenOsaConnectionInfo"), @"requesterBasedInCountry");
-    if ([country isKindOfClass:[NSString class]] && [country length] && [country length] <= 60) {
-        [fields addObject:@"uk_teen_osa_connection_info"];
-        [facts addObject:[@"based in " stringByAppendingString:country]];
-    }
-    id home = OhrtCallValue(user, @"homeCountry");
-    if ([home isKindOfClass:[NSString class]] && [home length] && [home length] <= 60) {
-        [fields addObject:@"home_country"];
-        [facts addObject:[@"home country " stringByAppendingString:home]];
-    }
-
-    if ([OhrtCallValue(user, @"reelMediaSeenTimestamp") isKindOfClass:[NSNumber class]]) [fields addObject:@"reel_media_seen_timestamp"];
     OhrtFactsSayFields(pk, fields);
-}
-
-// When you last watched a story of theirs, as Instagram keeps it.
-static NSString *OhrtFactsWatched(id user) {
-    id stamp = OhrtCallValue(user, @"reelMediaSeenTimestamp");
-    double seconds = [stamp isKindOfClass:[NSNumber class]] ? [stamp doubleValue] : 0;
-    while (seconds > 1e11) seconds /= 1000.0;
-    if (seconds < 1262304000 || seconds > [NSDate date].timeIntervalSince1970 + 86400) return nil;
-    return [@"watched their story " stringByAppendingString:OhrtDay([NSDate dateWithTimeIntervalSince1970:seconds])];
 }
 
 static NSString *OhrtFactsText(id user) {
@@ -351,8 +378,6 @@ static NSString *OhrtFactsText(id user) {
         OhrtAgoText(age, ago, sizeof(ago));
         [facts addObject:[@"story " stringByAppendingString:@(ago)]];
     }
-    NSString *watched = other ? OhrtFactsWatched(user) : nil;
-    if (watched) [facts addObject:watched];
     return [facts componentsJoinedByString:@", "];
 }
 
