@@ -19,9 +19,11 @@
 
 NSString *const kOhrtFactsKey = @"ohrt_facts";
 
-// The colour chosen for the line was #ff0349, then less harsh:
-// this is that red with a third of its strength taken out.
-static const uint32_t kOhrtFactsColour = 0xd9506f;
+// The red of the calico jack, faded: that colour was wanted, but less
+// harsh. Fading it lets what is behind it through, on a dark page or a
+// light one.
+static const uint32_t kOhrtFactsColour = 0xff0349;
+static const CGFloat kOhrtFactsFade = 0.6;
 // Between the line and the bio.
 static const CGFloat kOhrtFactsGap = 4;
 // A bio section with no bio in it is not inset from the screen's edges, so
@@ -177,7 +179,7 @@ static void OhrtFactsShow(id controller, UICollectionViewCell *cell) {
     if (!label && line) {
         label = [UILabel new];
         label.font = OhrtFactsFont();
-        label.textColor = OhrtColor(kOhrtFactsColour);
+        label.textColor = [OhrtColor(kOhrtFactsColour) colorWithAlphaComponent:kOhrtFactsFade];
         label.numberOfLines = 0;
         label.lineBreakMode = NSLineBreakByWordWrapping;
         [cell.contentView addSubview:label];
