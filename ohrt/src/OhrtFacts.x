@@ -2,7 +2,7 @@
 // buttons, of what the app holds about the account and does not show.
 //
 //   id 1234567890, creator, follows you since 2019-03-05, followed since 2019-03-02,
-//   you liked 214 posts (last 2026-10-30), commented 12 times, watched 88 stories,
+//   you liked 214 posts (last 2026-10-30), commented 12 times, watched 88 stories since 2026-11-15,
 //   340 messages between you since 2020-01-10, story 3h ago
 //
 // There are two sources, and nothing is asked of Instagram for either. The
@@ -13,7 +13,9 @@
 // and written. Every count is of what you did, never of what they did. It
 // comes from your Instagram export (OhrtExport.m) up to the day that was
 // made, and from our own notes of what you have done in this app since
-// (OhrtActivity.x).
+// (OhrtActivity.x). Stories watched come from our notes alone: the export
+// lists only some of the last month's, so a count from it would be far too
+// low. A count that does not go back to the start says since when.
 //
 // A profile's header is a list of parts, each with a controller of its own
 // that says how tall it is and makes its cell. The facts are one more part,
@@ -161,14 +163,22 @@ static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString 
     if (past[@"restricted"]) [facts addObject:@"restricted"];
     if (past[@"story_hidden"]) [facts addObject:@"your story is hidden from them"];
 
+    // With an export these go back to the start. Without one they are only
+    // what has been noted here, and the line says since when.
+    BOOL whole = OhrtExportDate() > 0;
+    NSString *began = OhrtActivityBegan() > 0 ? OhrtStamp(@(OhrtActivityBegan())) : nil;
     NSMutableArray<NSString *> *done = [NSMutableArray array];
     OhrtAddDone(done, @"likes", past, pk, @"liked", @"post", @"posts", YES);
     OhrtAddDone(done, @"comments", past, pk, @"commented", @"time", @"times", NO);
     OhrtAddDone(done, @"story_likes", past, pk, @"liked", @"story", @"stories", NO);
-    OhrtAddDone(done, @"stories_seen", past, pk, @"watched", @"story", @"stories", NO);
     OhrtAddDone(done, @"saved", past, pk, @"saved", @"post", @"posts", NO);
+    NSUInteger watched = OhrtActivityTimes(pk, @"stories_seen").count;
+    if (watched) {
+        NSString *text = [NSString stringWithFormat:@"watched %lu %@", (unsigned long)watched, watched == 1 ? @"story" : @"stories"];
+        [done addObject:whole && began ? [text stringByAppendingFormat:@" since %@", began] : text];
+    }
     if (done.count) {
-        done[0] = [@"you " stringByAppendingString:done[0]];
+        done[0] = whole || !began ? [@"you " stringByAppendingString:done[0]] : [NSString stringWithFormat:@"since %@ you %@", began, done[0]];
         [facts addObjectsFromArray:done];
     }
 

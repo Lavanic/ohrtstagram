@@ -108,6 +108,9 @@ FOUNDATION_EXPORT void OhrtExportImport(void);
 FOUNDATION_EXPORT NSNumber *OhrtActivityFollowed(NSString *pk);
 FOUNDATION_EXPORT NSArray<NSNumber *> *OhrtActivityTimes(NSString *pk, NSString *kind);
 FOUNDATION_EXPORT void OhrtActivityListen(void);
+// When the notes were begun, in seconds since 1970: what they count is
+// counted from then. 0 while it is not known who is signed in.
+FOUNDATION_EXPORT NSTimeInterval OhrtActivityBegan(void);
 // Messages with the account `pk`, read off a conversation that belongs to
 // the account `viewer` (OhrtMessages.x): for each its time in milliseconds
 // since 1970 and its id as a number. Those not noted before are. Main

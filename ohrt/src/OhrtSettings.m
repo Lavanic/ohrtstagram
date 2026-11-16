@@ -53,8 +53,9 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
             [SCISetting buttonCellWithTitle:@"Read in an export" subtitle:@"Unpack its zip in Files, then pick the folder" icon:nil action:^{
                 OhrtExportImport();
             }],
-        ], @"What an account is comes from the app as its profile opens. When you followed each other and how much you have liked, watched and written "
+        ], @"What an account is comes from the app as its profile opens. When you followed each other and how much you have liked and written "
            @"comes from your Insta\u2060gram export, which holds what the app does not, and from what you do here after it was made. "
+           @"Stories watched are counted here only, since the export lists too few of them. "
            @"Every count is of what you did. All of it stays on this phone."),
         OhrtSection(@"Look", @[
             OhrtRestartSwitch(@"ohrtstagram marks", @"Our wordmark at the top of the home feed and our mark on the login screen", kOhrtWordmarkKey),

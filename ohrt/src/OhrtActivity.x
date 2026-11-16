@@ -30,7 +30,7 @@ static NSString *const kOhrtMessageIds = @"messages_id";
 
 // The notes' own entry, filed like an account under a name none can have.
 static NSString *const kOhrtNotesOwn = @"_";
-static NSString *const kOhrtMessagesBegan = @"messages_began";
+static NSString *const kOhrtNotesBegan = @"began";
 
 // What Instagram calls a follow when it announces a change of friendship.
 // Read out of its own listener for new follows, which acts only on this.
@@ -184,23 +184,39 @@ NSArray<NSNumber *> *OhrtActivityTimes(NSString *pk, NSString *kind) {
     return [times isKindOfClass:[NSArray class]] ? [times copy] : nil;
 }
 
+NSTimeInterval OhrtActivityBegan(void) {
+    NSMutableDictionary<NSString *, NSMutableDictionary *> *notes = OhrtNotes();
+    if (!notes) return 0;
+    NSMutableDictionary *own = notes[kOhrtNotesOwn] ?: (notes[kOhrtNotesOwn] = [NSMutableDictionary dictionary]);
+    NSNumber *began = own[kOhrtNotesBegan];
+    if ([began isKindOfClass:[NSNumber class]]) return began.doubleValue;
+    // Notes that were begun before this was kept: the earliest thing in
+    // them. Messages are filed in other units and came later anyway.
+    double earliest = [NSDate date].timeIntervalSince1970;
+    for (NSString *pk in notes) {
+        NSDictionary *person = notes[pk];
+        for (NSString *kind in person) {
+            if ([kind hasPrefix:@"messages_"]) continue;
+            id value = person[kind];
+            for (id time in [value isKindOfClass:[NSArray class]] ? value : @[ value ]) {
+                if ([time isKindOfClass:[NSNumber class]] && [time doubleValue] > 1e9 && [time doubleValue] < earliest) earliest = [time doubleValue];
+            }
+        }
+    }
+    own[kOhrtNotesBegan] = @((long long)earliest);
+    OhrtNotesChanged();
+    return earliest;
+}
+
 // The time from which messages are counted here: when the export was made,
-// since it counts the ones before. With no export it is when this began to
-// keep count, because a conversation only ever shows its latest stretch,
+// since it counts the ones before. With no export it is when the notes
+// were begun, because a conversation only ever shows its latest stretch,
 // and counting that would give a number that grows as you scroll back. 0
 // while it is not known whose notes these are.
 static NSTimeInterval OhrtMessagesAfter(void) {
-    NSMutableDictionary<NSString *, NSMutableDictionary *> *notes = OhrtNotes();
-    if (!notes) return 0;
+    if (!OhrtNotes()) return 0;
     NSTimeInterval exported = OhrtExportDate();
-    if (exported > 0) return exported;
-    NSMutableDictionary *own = notes[kOhrtNotesOwn] ?: (notes[kOhrtNotesOwn] = [NSMutableDictionary dictionary]);
-    NSNumber *began = own[kOhrtMessagesBegan];
-    if (![began isKindOfClass:[NSNumber class]]) {
-        began = own[kOhrtMessagesBegan] = @((long long)[NSDate date].timeIntervalSince1970);
-        OhrtNotesChanged();
-    }
-    return began.doubleValue;
+    return exported > 0 ? exported : OhrtActivityBegan();
 }
 
 // Conversations are read from the moment the app starts, which is before
