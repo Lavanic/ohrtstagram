@@ -98,6 +98,7 @@ FACTS = [
     ("why a post is in the feed", "-[IGBaseMedia rankedAt]", ['@"ranked_at"', "[... longForPandoKey:cppKey:]"]),
     ("why a post is in the feed", "-[IGBaseMedia feedRankingSourceDebugLabel]",
      ['@"feed_ranking_source_debug_label"', "[... stringForPandoKey:cppKey:]"]),
+    ("dm ranking", "-[IGUserSession rankingService]", ["[... valueWithInitializer:]"]),
     ("closeness", "-[IGUserBootstrapService scoreForUser:surface:]",
      ["[... coeffWeight]", "[... graphQLID]", "[... objectForKeyedSubscript:]"]),
     ("scores and flags", "-[IGBaseUser accountWarning]",
