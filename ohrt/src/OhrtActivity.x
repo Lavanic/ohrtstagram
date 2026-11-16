@@ -96,22 +96,21 @@ static NSMutableDictionary<NSString *, NSMutableDictionary *> *OhrtNotes(void) {
         }
         gOhrtNotes[pk] = mine;
     }
-    // Follows noted by the first version of this, which kept them apart.
-    NSDictionary *older = [NSDictionary dictionaryWithContentsOfFile:[OhrtActivityFolder() stringByAppendingPathComponent:[NSString stringWithFormat:@"followed-%@.plist", account]]];
-    for (NSString *pk in older) {
-        if (![older[pk] isKindOfClass:[NSNumber class]]) continue;
-        NSMutableDictionary *person = gOhrtNotes[pk] ?: (gOhrtNotes[pk] = [NSMutableDictionary dictionary]);
-        if (!person[kOhrtFollowedKind]) person[kOhrtFollowedKind] = older[pk];
-    }
     OhrtLog(@"activity: notes on %lu accounts are on file", (unsigned long)gOhrtNotes.count);
     return gOhrtNotes;
 }
 
+// The notes are made into a file here and written off the main thread.
 static void OhrtNotesSave(void) {
     if (!gOhrtNotesUnsaved || !gOhrtNotes || !gOhrtNotesAccount.length) return;
     gOhrtNotesUnsaved = NO;
-    [[NSFileManager defaultManager] createDirectoryAtPath:OhrtActivityFolder() withIntermediateDirectories:YES attributes:nil error:nil];
-    if (![gOhrtNotes writeToFile:OhrtNotesPath(gOhrtNotesAccount) atomically:YES]) OhrtLog(@"activity: the notes could not be written");
+    NSData *data = [NSPropertyListSerialization dataWithPropertyList:gOhrtNotes format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
+    NSString *folder = OhrtActivityFolder(), *path = OhrtNotesPath(gOhrtNotesAccount);
+    if (!data) return;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        [[NSFileManager defaultManager] createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
+        if (![data writeToFile:path atomically:YES]) OhrtLog(@"activity: the notes could not be written");
+    });
 }
 
 // Stories go by quickly, so the file is written a moment after the last
