@@ -7,7 +7,8 @@
   ipa.py settings <folder> <version> <instagram version>
                                             write our page for the Settings app
   ipa.py icons    <png> <folder>            write the app icon at every size
-  ipa.py check    <ipa> <name> <bundle-id> [--settings] <dylib>...
+  ipa.py wordmark <svg> <png>               turn the wordmark's drawing into its picture
+  ipa.py check    <ipa> <name> <bundle-id> [--settings] [--has <file>]... <dylib>...
                                             verify a built IPA and describe it
 """
 import plistlib
@@ -234,6 +235,35 @@ def command_icons(source, folder):
         plistlib.dump(keys, handle)
 
 
+def command_wordmark(source, target):
+    """Turns the wordmark's drawing into the picture the app carries.
+
+    Cut to what is drawn, and 240 pixels tall, which is more than any screen
+    shows it at. Only its shape is used: the app colours it. Run by hand when
+    the drawing changes. The picture is kept in the repository so that a
+    build does not need rsvg-convert.
+    """
+    import io
+    import subprocess
+    try:
+        from PIL import Image
+    except ImportError:
+        die("making the wordmark needs Pillow (pacman -S python-pillow)")
+    try:
+        raw = subprocess.run(["rsvg-convert", "-h", "960", source], check=True, capture_output=True).stdout
+    except FileNotFoundError:
+        die("making the wordmark needs rsvg-convert (pacman -S librsvg)")
+    image = Image.open(io.BytesIO(raw)).convert("RGBA")
+    box = image.getchannel("A").getbbox()
+    if not box:
+        die(f"nothing is drawn in {source}")
+    image = image.crop(box)
+    height = 240
+    image = image.resize((round(image.width * height / image.height), height), Image.LANCZOS)
+    image.save(target, optimize=True)
+    print(f"{target}: {image.width} by {image.height}")
+
+
 def command_check(path, name, bundle_id, *dylibs):
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
@@ -241,6 +271,15 @@ def command_check(path, name, bundle_id, *dylibs):
         info = info_plist(archive, root)
         libraries = linked_libraries(main_binary(archive, root))
         problems = unresolved(archive, root, names)
+
+    dylibs = list(dylibs)
+    while "--has" in dylibs:
+        at = dylibs.index("--has")
+        if at + 1 >= len(dylibs):
+            die("--has needs a file name")
+        if root + dylibs[at + 1] not in names:
+            problems.append(f"{dylibs[at + 1]} is not in the app")
+        del dylibs[at:at + 2]
 
     if info.get("CFBundleDisplayName") != name:
         problems.append(f"the name is {info.get('CFBundleDisplayName')!r}, not {name!r}")
@@ -287,7 +326,7 @@ def command_check(path, name, bundle_id, *dylibs):
 
 
 COMMANDS = {"version": command_version, "precheck": command_precheck, "add": command_add, "settings": command_settings,
-            "icons": command_icons, "check": command_check}
+            "icons": command_icons, "wordmark": command_wordmark, "check": command_check}
 
 if __name__ == "__main__":
     if len(sys.argv) < 3 or sys.argv[1] not in COMMANDS:

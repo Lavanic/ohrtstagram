@@ -38,6 +38,9 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("wall", "IGListAdapter", "collectionView"),
     OHRT_NEED("wall", "IGListAdapter", "objects"),
 
+    OHRT_NEED("wordmark", "IGHomeFeedHeaderView", "setTitle:animated:"),
+    OHRT_NEED("wordmark", "IGHomeFeedHeaderView", "layoutSubviews"),
+
     OHRT_NEED("dm", "IGTabBarController", "viewWillAppear:"),
     OHRT_NEED("dm", "IGTabBarController", "_tabBarHasDirectInbox"),
     OHRT_NEED("dm", "IGTabBarController", "_directInboxButtonPressed"),
@@ -113,7 +116,7 @@ NSString *OhrtSelfCheck(void) {
     NSString *instagram = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     [report appendFormat:@"ohrtstagram %@ (%@) on Instagram %@, iOS %@\n", OHRT_VERSION, OHRT_BUILD, instagram, [UIDevice currentDevice].systemVersion];
     [report appendFormat:@"safe mode this start: %@\n", OhrtSafeLaunch() ? @"yes" : @"no"];
-    for (NSString *feature in @[ @"start", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
+    for (NSString *feature in @[ @"start", @"wordmark", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
         NSString *missing = OhrtMissing(feature);
         [report appendFormat:@"%@: %@\n", feature, missing ? [@"missing " stringByAppendingString:missing] : @"ok"];
     }

@@ -18,6 +18,7 @@ FOUNDATION_EXPORT NSString *const kOhrtGrayscaleKey;
 FOUNDATION_EXPORT NSString *const kOhrtDMModeKey;
 FOUNDATION_EXPORT NSString *const kOhrtFollowingFeedKey;
 FOUNDATION_EXPORT NSString *const kOhrtWallKey;
+FOUNDATION_EXPORT NSString *const kOhrtWordmarkKey;
 
 FOUNDATION_EXPORT BOOL OhrtBool(NSString *key);
 
@@ -43,6 +44,7 @@ FOUNDATION_EXPORT void OhrtGuardAppLaunching(void);
 FOUNDATION_EXPORT void OhrtInstallDMMode(void);
 FOUNDATION_EXPORT void OhrtInstallFollowing(void);
 FOUNDATION_EXPORT void OhrtInstallWall(void);
+FOUNDATION_EXPORT void OhrtInstallWordmark(void);
 
 // What a feature needs from the Instagram that is running (OhrtNeeds.m).
 FOUNDATION_EXPORT NSString *OhrtMissing(NSString *feature);

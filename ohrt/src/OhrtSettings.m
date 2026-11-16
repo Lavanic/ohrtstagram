@@ -45,6 +45,9 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         ], @"The wall uses the following feed whether or not that switch is on."),
         OhrtSection(@"Mode", @[
             OhrtRestartSwitch(@"DM mode", @"Opens on your messages, with the home tab hidden", kOhrtDMModeKey),
+        ], nil),
+        OhrtSection(@"Look", @[
+            OhrtRestartSwitch(@"ohrtstagram wordmark", @"The name at the top of the home feed", kOhrtWordmarkKey),
             OhrtSwitch(@"Grayscale", @"Shows the whole app in grey", kOhrtGrayscaleKey),
         ], nil),
     ];
