@@ -15,7 +15,8 @@ NSString *const kOhrtBudgetMinutesKey = @"ohrt_time_budget_minutes";
 
 static NSString *const kOhrtDayKey = @"ohrt_time_day";
 static NSString *const kOhrtSecondsKey = @"ohrt_time_seconds";
-static NSString *const kOhrtExtraMinutesKey = @"ohrt_time_extra_minutes";
+// The point in today's count that "five more minutes" lifted the lock to.
+static NSString *const kOhrtAllowedUntilKey = @"ohrt_time_allowed_until";
 
 static const NSTimeInterval kOhrtTick = 5.0;
 static const NSInteger kOhrtExtraStep = 5;
@@ -45,7 +46,7 @@ static void OhrtRollDay(void) {
     if ([[defaults stringForKey:kOhrtDayKey] isEqualToString:today]) return;
     [defaults setObject:today forKey:kOhrtDayKey];
     [defaults setDouble:0 forKey:kOhrtSecondsKey];
-    [defaults setInteger:0 forKey:kOhrtExtraMinutesKey];
+    [defaults setDouble:0 forKey:kOhrtAllowedUntilKey];
     gOhrtUnsaved = 0;
 }
 
@@ -184,8 +185,8 @@ NSString *OhrtFormatDuration(NSTimeInterval seconds) {
 - (void)evaluate {
     NSInteger budget = [self budgetMinutes];
     NSTimeInterval spent = OhrtTimeSpentToday();
-    NSInteger extra = [[NSUserDefaults standardUserDefaults] integerForKey:kOhrtExtraMinutesKey];
-    if (OhrtOverBudget(spent, budget, extra)) [self showLockForBudget:budget spent:spent];
+    double allowedUntil = [[NSUserDefaults standardUserDefaults] doubleForKey:kOhrtAllowedUntilKey];
+    if (OhrtOverBudget(spent, budget, allowedUntil)) [self showLockForBudget:budget spent:spent];
     else [self hideLock];
 }
 
@@ -207,8 +208,8 @@ NSString *OhrtFormatDuration(NSTimeInterval seconds) {
         __weak typeof(self) weakSelf = self;
         controller.onMore = ^{
             // Five minutes from now, however long the lock has been up.
-            long extra = OhrtExtraAfterMore(OhrtTimeSpentToday(), (long)[weakSelf budgetMinutes], kOhrtExtraStep);
-            [[NSUserDefaults standardUserDefaults] setInteger:extra forKey:kOhrtExtraMinutesKey];
+            double allowedUntil = OhrtAllowedAfterMore(OhrtTimeSpentToday(), kOhrtExtraStep);
+            [[NSUserDefaults standardUserDefaults] setDouble:allowedUntil forKey:kOhrtAllowedUntilKey];
             [weakSelf evaluate];
         };
         UIWindow *window = [[UIWindow alloc] initWithWindowScene:scene];

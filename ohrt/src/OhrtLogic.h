@@ -26,19 +26,20 @@ static inline double OhrtCountedTime(double elapsed, double tick) {
 }
 
 // Whether the lock screen should be up. A budget of zero is no budget.
-static inline int OhrtOverBudget(double spentSeconds, long budgetMinutes, long extraMinutes) {
+// `allowedUntil` is what "five more minutes" leaves behind: the point in
+// today's count, in seconds, up to which the lock stays down. It is a point
+// in the count and not an amount on top of the budget, so changing the
+// budget afterwards does not stretch it.
+static inline int OhrtOverBudget(double spentSeconds, long budgetMinutes, double allowedUntil) {
     if (budgetMinutes <= 0) return 0;
-    if (extraMinutes < 0) extraMinutes = 0;
-    return spentSeconds >= (double)(budgetMinutes + extraMinutes) * 60.0;
+    if (spentSeconds < (double)budgetMinutes * 60.0) return 0;
+    return !(spentSeconds < allowedUntil);
 }
 
-// What "five more minutes" sets the extra allowance to: enough to be `step`
-// minutes past the time already spent, however far past the budget that is.
-// Adding the step to an allowance that is already behind would lift nothing.
-static inline long OhrtExtraAfterMore(double spentSeconds, long budgetMinutes, long step) {
-    long spent = (long)ceil(spentSeconds / 60.0);
-    long extra = spent - budgetMinutes + step;
-    return extra < step ? step : extra;
+// What "five more minutes" sets that point to: `step` minutes past the time
+// already spent, however far past the budget that is.
+static inline double OhrtAllowedAfterMore(double spentSeconds, long step) {
+    return (spentSeconds > 0 ? spentSeconds : 0) + (double)step * 60.0;
 }
 
 // Caught up wall

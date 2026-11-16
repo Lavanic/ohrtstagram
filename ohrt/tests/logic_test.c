@@ -36,19 +36,23 @@ static void time_budget(void) {
     CHECK("no budget never locks", !OhrtOverBudget(999999, 0, 0));
     CHECK("under budget", !OhrtOverBudget(29 * 60, 30, 0));
     CHECK("at budget", OhrtOverBudget(30 * 60, 30, 0));
-    CHECK("five more minutes lifts it", !OhrtOverBudget(31 * 60, 30, 5));
-    CHECK("and it comes back", OhrtOverBudget(35 * 60, 30, 5));
-    CHECK("negative extra is ignored", OhrtOverBudget(30 * 60, 30, -10));
+    CHECK("an allowance that is behind lifts nothing", OhrtOverBudget(40 * 60, 30, 36 * 60));
+    CHECK("a negative allowance is ignored", OhrtOverBudget(30 * 60, 30, -600));
+    CHECK("an allowance that is not a number is ignored", OhrtOverBudget(30 * 60, 30, NAN));
 
     // "Five more minutes" has to lift the lock from wherever the count is.
-    long extra = OhrtExtraAfterMore(30 * 60, 30, 5);
-    CHECK("at the budget, five more is five", extra == 5 && !OhrtOverBudget(30 * 60, 30, extra));
-    extra = OhrtExtraAfterMore(120 * 60, 30, 5);
-    CHECK("two hours in on a half hour budget, one tap lifts it", extra == 95 && !OhrtOverBudget(120 * 60, 30, extra));
-    CHECK("and it holds for five minutes, no longer", !OhrtOverBudget(124 * 60, 30, extra) && OhrtOverBudget(125 * 60, 30, extra));
-    extra = OhrtExtraAfterMore(31 * 60 + 20, 30, 5);
-    CHECK("part minutes round up", extra == 7 && !OhrtOverBudget(31 * 60 + 20, 30, extra));
-    CHECK("never less than the step", OhrtExtraAfterMore(0, 30, 5) == 5);
+    double allowed = OhrtAllowedAfterMore(30 * 60, 5);
+    CHECK("at the budget, five more lifts it", allowed == 35 * 60 && !OhrtOverBudget(30 * 60, 30, allowed));
+    CHECK("and it comes back", !OhrtOverBudget(35 * 60 - 1, 30, allowed) && OhrtOverBudget(35 * 60, 30, allowed));
+    allowed = OhrtAllowedAfterMore(120 * 60, 5);
+    CHECK("two hours in on a half hour budget, one tap lifts it", !OhrtOverBudget(120 * 60, 30, allowed));
+    CHECK("and it holds for five minutes, no longer", !OhrtOverBudget(124 * 60, 30, allowed) && OhrtOverBudget(125 * 60, 30, allowed));
+    CHECK("a budget raised afterwards does not stretch it", !OhrtOverBudget(124 * 60, 60, allowed) && OhrtOverBudget(125 * 60, 60, allowed));
+    CHECK("a budget lowered afterwards does not cut it short", !OhrtOverBudget(124 * 60, 10, allowed));
+    CHECK("a budget raised past the count lifts the lock by itself", !OhrtOverBudget(126 * 60, 180, allowed));
+    allowed = OhrtAllowedAfterMore(31 * 60 + 20, 5);
+    CHECK("part minutes are kept", allowed == 36 * 60 + 20);
+    CHECK("a count below zero is taken as zero", OhrtAllowedAfterMore(-50, 5) == 5 * 60);
 }
 
 static void wall(void) {
