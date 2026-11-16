@@ -215,14 +215,23 @@ static CGFloat OhrtPostSide(void) {
 static char kOhrtRowMediaKey;
 static char kOhrtRowHiddenKey;
 
+static NSString *OhrtPostLikesFact(long long count, BOOL more) {
+    return [NSString stringWithFormat:@"%@%@ %@ (hidden)", more ? @"at least " : @"", OhrtGrouped(count), count == 1 && !more ? @"like" : @"likes"];
+}
+
+static NSString *OhrtPostJoined(NSString *likes, NSString *base) {
+    if (!likes) return base;
+    return base.length ? [NSString stringWithFormat:@"%@, %@", likes, base] : likes;
+}
+
 static NSString *OhrtPostShown(id row) {
     NSString *base = OhrtPostString(OhrtCall(row, @"value"));
     if (![objc_getAssociatedObject(row, &kOhrtRowHiddenKey) boolValue]) return base;
     NSString *mediaId = objc_getAssociatedObject(row, &kOhrtRowMediaKey);
-    NSString *counted = OhrtLikesCountedFor(mediaId);
-    NSString *likes = counted ? [counted stringByAppendingString:@" (hidden), counted from who liked it"] : OhrtLikesPending(mediaId) ? @"counting hidden likes\u2026" : nil;
-    if (!likes) return base;
-    return base.length ? [NSString stringWithFormat:@"%@, %@", likes, base] : likes;
+    long long count = 0;
+    BOOL more = NO;
+    if (OhrtLikesCountedNumber(mediaId, &count, &more)) return OhrtPostJoined(OhrtPostLikesFact(count, more), base);
+    return OhrtPostJoined(OhrtLikesPending(mediaId) ? @"counting hidden likes\u2026" : nil, base);
 }
 
 static CGFloat OhrtPostTextHeight(NSString *text, CGFloat width) {
@@ -250,7 +259,14 @@ static CGFloat OhrtPostTextHeight(NSString *text, CGFloat width) {
 @property (nonatomic, copy) NSString *mediaId;
 @property (nonatomic, strong) id row;
 @property (nonatomic, weak) id controller;
+// A hidden like count that has just come in runs up to its number.
+@property (nonatomic, strong) CADisplayLink *ticker;
+@property (nonatomic) CFTimeInterval tickStart;
+@property (nonatomic) long long tickTarget;
+@property (nonatomic) BOOL tickMore;
 @end
+
+static const CFTimeInterval kOhrtTickTime = 0.9;
 
 // Cells on screen, to update when a hidden like count comes in.
 static NSHashTable<OhrtPostFactsCell *> *gOhrtPostCells;
@@ -267,6 +283,34 @@ static NSHashTable<OhrtPostFactsCell *> *gOhrtPostCells;
         [self.contentView addSubview:_label];
     }
     return self;
+}
+
+- (void)tickTo:(long long)count more:(BOOL)more {
+    [self stopTicking];
+    self.tickTarget = count;
+    self.tickMore = more;
+    self.tickStart = CACurrentMediaTime();
+    self.ticker = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
+    [self.ticker addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+    [self tick:self.ticker];
+}
+
+- (void)tick:(CADisplayLink *)link {
+    double progress = MIN(1.0, (CACurrentMediaTime() - self.tickStart) / kOhrtTickTime);
+    double eased = 1 - pow(1 - progress, 3);
+    long long now = progress >= 1 ? self.tickTarget : (long long)llround(self.tickTarget * eased);
+    self.label.text = OhrtPostJoined(OhrtPostLikesFact(now, self.tickMore && progress >= 1), OhrtPostString(OhrtCall(self.row, @"value")));
+    if (progress >= 1) [self stopTicking];
+}
+
+- (void)stopTicking {
+    [self.ticker invalidate];
+    self.ticker = nil;
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    [self stopTicking];
 }
 
 - (void)layoutSubviews {
@@ -439,7 +483,10 @@ void OhrtInstallPostFacts(void) {
             OhrtTry(@"post facts", ^{
                 for (OhrtPostFactsCell *cell in gOhrtPostCells.allObjects) {
                     if (!cell.mediaId || ![cell.mediaId isEqual:note.object]) continue;
-                    cell.label.text = OhrtPostShown(cell.row);
+                    long long count = 0;
+                    BOOL more = NO;
+                    if (cell.window && [cell.label.text hasPrefix:@"counting hidden likes"] && OhrtLikesCountedNumber(cell.mediaId, &count, &more)) [cell tickTo:count more:more];
+                    else cell.label.text = OhrtPostShown(cell.row);
                     [cell setNeedsLayout];
                     id controller = cell.controller;
                     id context = OhrtCall(controller, @"collectionContext");

@@ -68,6 +68,8 @@ FOUNDATION_EXPORT void OhrtInstallPostFacts(void);
 // main thread with the post's id as its object.
 FOUNDATION_EXPORT NSString *OhrtMediaId(id media);
 FOUNDATION_EXPORT NSString *OhrtLikesCountedFor(NSString *mediaId);
+// The same as a number, and whether it is only a floor.
+FOUNDATION_EXPORT BOOL OhrtLikesCountedNumber(NSString *mediaId, long long *count, BOOL *more);
 FOUNDATION_EXPORT void OhrtLikesWant(NSString *mediaId);
 FOUNDATION_EXPORT BOOL OhrtLikesPending(NSString *mediaId);
 FOUNDATION_EXPORT void OhrtLikesDescribe(id media);

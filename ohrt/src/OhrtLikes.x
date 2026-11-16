@@ -2,10 +2,9 @@
 //
 // Instagram does not send that count: a post with hidden likes comes with
 // a stand-in, the real count up to 3 and then 3, the same for everyone. What
-// it does still give is who liked it, and that list is whole: 104 and 105
-// people for posts that said 3. So the count is taken from the list: how
-// many it lists plus any it says it left unnamed, or the total it gives if
-// that is larger, with a "+" when there were more pages than were read.
+// it does still give is who liked it, but only the first hundred or so
+// names, with no way on to the rest. So the count is taken from the list:
+// exact when it is short, and "at least" what it names when it is full.
 //
 // The list is asked for when a hidden post's facts row comes on screen,
 // through the same reader and the same request ("/media/<id>/likers/") as
@@ -23,7 +22,11 @@
 NSString *const kOhrtLikesKey = @"ohrt_hidden_likes";
 NSString *const kOhrtLikesCountedNotification = @"OhrtLikesCounted";
 
-static NSString *const kOhrtCountedKey = @"ohrt_counted_likes";
+// The first key held full lists counted as exact; they are dropped.
+static NSString *const kOhrtCountedKey = @"ohrt_counted_likes_2";
+static NSString *const kOhrtCountedOldKey = @"ohrt_counted_likes";
+// Instagram names at most about this many likers for a post.
+static const long long kOhrtLikersNamed = 100;
 static NSString *const kOhrtAskedKey = @"ohrt_likers_asked";
 static NSString *const kOhrtPausedKey = @"ohrt_likers_paused";
 static const NSUInteger kOhrtCountedKept = 500;
@@ -65,6 +68,7 @@ static NSObject *OhrtCountedLock(void) {
     dispatch_once(&once, ^{
         lock = [NSObject new];
         gOhrtCounted = [NSMutableDictionary dictionary];
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:kOhrtCountedOldKey];
         NSDictionary *kept = [[NSUserDefaults standardUserDefaults] dictionaryForKey:kOhrtCountedKey];
         for (NSString *mediaId in kept) {
             NSArray *entry = kept[mediaId];
@@ -75,16 +79,25 @@ static NSObject *OhrtCountedLock(void) {
 }
 
 static NSString *OhrtLikesText(long long count, BOOL more) {
-    return [NSString stringWithFormat:@"%@%@ %@", OhrtGrouped(count), more ? @"+" : @"", count == 1 && !more ? @"like" : @"likes"];
+    return [NSString stringWithFormat:@"%@%@ %@", more ? @"at least " : @"", OhrtGrouped(count), count == 1 && !more ? @"like" : @"likes"];
 }
 
-NSString *OhrtLikesCountedFor(NSString *mediaId) {
-    if (!mediaId) return nil;
+BOOL OhrtLikesCountedNumber(NSString *mediaId, long long *count, BOOL *more) {
+    if (!mediaId) return NO;
     NSArray<NSNumber *> *counted;
     @synchronized(OhrtCountedLock()) {
         counted = gOhrtCounted[mediaId];
     }
-    return counted ? OhrtLikesText(counted[0].longLongValue, counted[1].boolValue) : nil;
+    if (!counted) return NO;
+    if (count) *count = counted[0].longLongValue;
+    if (more) *more = counted[1].boolValue;
+    return YES;
+}
+
+NSString *OhrtLikesCountedFor(NSString *mediaId) {
+    long long count = 0;
+    BOOL more = NO;
+    return OhrtLikesCountedNumber(mediaId, &count, &more) ? OhrtLikesText(count, more) : nil;
 }
 
 static void OhrtLikesAnnounce(NSString *mediaId) {
@@ -117,7 +130,9 @@ static void OhrtLikesFromList(id source, NSString *how, long long *count, BOOL *
     long long anonymous = [unnamed isKindOfClass:[NSNumber class]] ? [unnamed longLongValue] : 0;
     BOOL more = [OhrtCallValue(source, @"moreAvailable") boolValue];
     *count = MAX(listed + MAX(anonymous, 0), total);
-    *plus = more && listed + anonymous >= total;
+    // A full list stops at about a hundred names and says there are no
+    // more, so a count that reaches that is only a floor.
+    *plus = (more && listed + anonymous >= total) || (listed >= kOhrtLikersNamed && total < listed);
     static NSUInteger told;
     if (told < 10) {
         told++;
