@@ -268,17 +268,18 @@ static NSDictionary *OhrtDictionaryCopy(id value) {
 // its share sheets are sorted by. Each is a list of scores worked out on
 // Meta's servers, refreshed by the app and kept on the phone; a few people
 // the app has just talked to or seen active are boosted on the phone. The
-// lists are tried in this order and the first that has the account is
-// shown, under what that list is for.
+// share sheet's lists come first: they rank 150 people with a wide spread
+// and are what he sees when sharing. The "new message" list is left out:
+// its 41 scores sit within 0.13 of each other, so its order says little.
+// The first list that has the account is shown, under what it is for.
 static const struct {
     long long view;
     __unsafe_unretained NSString *label;
 } kOhrtLiveViews[] = {
-    {3, @"dm_rank"},
-    {4, @"dm_search_rank"},
     {1, @"share_rank"},
     {2, @"share_rank"},
     {6, @"share_rank"},
+    {4, @"dm_search_rank"},
 };
 
 static BOOL OhrtAddLiveRanking(NSMutableArray<NSString *> *facts, NSMutableArray<NSString *> *fields, NSString *pk) {
@@ -318,7 +319,15 @@ static BOOL OhrtAddLiveRanking(NSMutableArray<NSString *> *facts, NSMutableArray
         }
         if (!best) continue;
         [fields addObject:[NSString stringWithFormat:@"live_view_%lld", kOhrtLiveViews[index].view]];
-        [facts addObject:[NSString stringWithFormat:@"%@ %@", kOhrtLiveViews[index].label, OhrtRankText(best.doubleValue, scores, NO)]];
+        // Only the place: these scores have no fixed scale (up to 1,900
+        // were seen), so the number itself says nothing.
+        NSUInteger above = 0, total = 0;
+        for (id value in scores.allValues) {
+            if (![value isKindOfClass:[NSNumber class]]) continue;
+            total++;
+            if ([value doubleValue] > best.doubleValue) above++;
+        }
+        [facts addObject:[NSString stringWithFormat:@"%@ %@ of %@", kOhrtLiveViews[index].label, OhrtOrdinal(above + 1), OhrtGrouped((long long)total)]];
         return YES;
     }
     return NO;
