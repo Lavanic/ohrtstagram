@@ -7,6 +7,7 @@
 #import "../../src/Tweak.h"
 #import "../../src/Utils.h"
 #import "Ohrt.h"
+#import "OhrtLogic.h"
 
 NSString *const kOhrtDMModeKey = @"ohrt_dm_mode";
 NSString *const kOhrtFollowingFeedKey = @"ohrt_following_feed";
@@ -34,6 +35,12 @@ id OhrtCall(id object, NSString *selector) {
     SEL sel = NSSelectorFromString(selector);
     if (!object || ![object respondsToSelector:sel]) return nil;
     return ((id (*)(id, SEL))objc_msgSend)(object, sel);
+}
+
+NSString *OhrtGrouped(long long count) {
+    char text[32];
+    OhrtGroupDigits(count, text, sizeof(text));
+    return @(text);
 }
 
 id OhrtCallValue(id object, NSString *selector) {
@@ -108,7 +115,8 @@ static void OhrtRegisterDefaults(void) {
         kOhrtNameKey : @YES,
         // Asked for, and it only adds a line to a screen.
         kOhrtFactsKey : @YES,
-        // Asked for, and it only shows a number that came with the post.
+        // Asked for. It reads who liked a hidden post, which is a request
+        // to Instagram per post, kept within the caps in OhrtLikes.x.
         kOhrtLikesKey : @YES,
         // Asked for, and like the profile's it only adds a line.
         kOhrtPostFactsKey : @YES,

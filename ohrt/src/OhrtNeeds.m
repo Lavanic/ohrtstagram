@@ -76,6 +76,8 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("likes", "IGUserListNetworkDataSource", "setDelegate:"),
     OHRT_NEED("likes", "IGUserListNetworkDataSource", "fetchData"),
     OHRT_NEED("likes", "IGMedia", "mediaID"),
+    OHRT_NEED("likes", "IGBaseMedia", "likeAndViewCountsDisabled"),
+    OHRT_NEED("likes", "IGUserListNetworkDataSource", "fetchError"),
 
     OHRT_NEED("postfacts", "IGFeedItemTimelineViewModelImpl", "initWithMedia:configuration:feedConfiguration:userSession:showAYMFCellBelowHeader:showInlineComposer:showRowStyleCTA:isDelayedRowCTAVisible:showWYTSurvey:isMLEXPreview:coauthorRowType:shouldShowAdsFeedbackInterface:shouldShowAdsFeedbackInterfaceRepetition:afiInterestsPickerState:leadGenInterestPickerCellViewState:shouldShowInjectedFeedUnit:shouldShowInlineCommentPreview:shouldLogRowTypes:shouldHideHeaderRow:shouldShowOnImpressionControl:showDelaySkipAdNUX:isFloatingSocialContextDismissed:shouldExpandCTAVertically:showDelaySkipAdPersistentTombstone:shouldShowHIDEntryPoint:shouldShowChainingTopicTray:shouldShowSponsoredLabelInFooter:shouldRenderDestinationInfoAttachement:commercePageEligibleModules:"),
     OHRT_NEED("postfacts", "IGFeedItemTimelineViewModelImpl", "rowItems"),
@@ -90,6 +92,9 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("postfacts", "IGFeedItemRow", "value"),
     OHRT_NEED("postfacts", "IGFeedItemTextCell", "layoutSubviews"),
     OHRT_NEED("postfacts", "IGListAdapter", "dequeueReusableCellOfClass:forSectionController:atIndex:"),
+    OHRT_NEED("postfacts", "IGListAdapter", "insetContainerSize"),
+    OHRT_NEED("postfacts", "IGListAdapter", "invalidateLayoutForSectionController:completion:"),
+    OHRT_NEED("postfacts", "IGBaseMedia", "likeAndViewCountsDisabled"),
 
     OHRT_NEED("suggested", "IGProfileHeaderView", "objectsForListAdapter:"),
 

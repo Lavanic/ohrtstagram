@@ -6,11 +6,11 @@
 //   caption edited, 1080x1350, 98,765 plays, tagged place at 40.71280,
 //   -74.00600, ai sees: 2 people, beach and text
 //
-// Only what Instagram does not show already. Nothing is asked of it: this
-// is read off the post as the feed received it, so a fact the server did
-// not send is left out. The one exception is a hidden like count, which
-// the server does not send at all; that is counted from who liked it once
-// you have opened that list (OhrtLikes.x).
+// Only what Instagram does not show already, read off the post as the feed
+// received it, so a fact the server did not send is left out. The one
+// exception is a hidden like count, which the server does not send at all:
+// that is counted from who liked the post, read when the row comes on
+// screen (OhrtLikes.x).
 //
 // A post in the feed is one list section whose rows (header, picture,
 // buttons, likes, caption, comments) come from an array its view model
@@ -58,13 +58,6 @@ static NSNumber *OhrtPostNumber(id value) {
 
 static NSString *OhrtPostString(id value) {
     return [value isKindOfClass:[NSString class]] && [value length] ? value : nil;
-}
-
-// 12347 as "12,347".
-static NSString *OhrtPostCount(long long count) {
-    char text[32];
-    OhrtGroupDigits(count, text, sizeof(text));
-    return @(text);
 }
 
 static NSString *OhrtPostMinute(NSDate *date) {
@@ -181,11 +174,11 @@ static NSString *OhrtPostText(id media) {
         if (!value) continue;
         [fields addObject:count[0]];
         if (value.longLongValue <= 0) continue;
-        [facts addObject:[NSString stringWithFormat:@"%@ %@", OhrtPostCount(value.longLongValue), value.longLongValue == 1 ? count[1] : count[2]]];
+        [facts addObject:[NSString stringWithFormat:@"%@ %@", OhrtGrouped(value.longLongValue), value.longLongValue == 1 ? count[1] : count[2]]];
     }
     if (!OhrtPostNumber(OhrtCallValue(media, @"igPlayCount"))) {
         NSNumber *plays = OhrtPostNumber(OhrtCallValue(media, @"playCount"));
-        if (plays.longLongValue > 0) [facts addObject:[NSString stringWithFormat:@"%@ %@", OhrtPostCount(plays.longLongValue), plays.longLongValue == 1 ? @"play" : @"plays"]];
+        if (plays.longLongValue > 0) [facts addObject:[NSString stringWithFormat:@"%@ %@", OhrtGrouped(plays.longLongValue), plays.longLongValue == 1 ? @"play" : @"plays"]];
     }
 
     NSNumber *lat = OhrtPostNumber(OhrtCallValue(media, @"lat")), *lng = OhrtPostNumber(OhrtCallValue(media, @"lng"));
@@ -285,12 +278,19 @@ static NSHashTable<OhrtPostFactsCell *> *gOhrtPostCells;
 
 @end
 
+// Asked for every row of every post, so kept cheap.
 static id OhrtPostRowAt(id controller, NSInteger index) {
-    SEL rowAt = NSSelectorFromString(@"rowForCellAtIndex:");
+    static SEL rowAt, type;
+    static Class rowClass;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        rowAt = NSSelectorFromString(@"rowForCellAtIndex:");
+        type = NSSelectorFromString(@"type");
+        rowClass = NSClassFromString(@"IGFeedItemRow");
+    });
     if (![controller respondsToSelector:rowAt]) return nil;
     id row = ((id (*)(id, SEL, NSInteger))objc_msgSend)(controller, rowAt, index);
-    SEL type = NSSelectorFromString(@"type");
-    if (![row respondsToSelector:type] || ((int (*)(id, SEL))objc_msgSend)(row, type) != kOhrtPostFactsRow) return nil;
+    if (!rowClass || ![row isKindOfClass:rowClass] || ((int (*)(id, SEL))objc_msgSend)(row, type) != kOhrtPostFactsRow) return nil;
     return row;
 }
 
@@ -326,7 +326,7 @@ static void OhrtPostAddRow(id model, id media) {
         return;
     }
     NSString *text = OhrtPostText(media);
-    BOOL hidden = [OhrtPostNumber(OhrtCallValue(media, @"likeAndViewCountsDisabled")) boolValue];
+    BOOL hidden = OhrtFeature(kOhrtLikesKey) && [OhrtPostNumber(OhrtCallValue(media, @"likeAndViewCountsDisabled")) boolValue];
     if (!text.length && !hidden) return;
     SEL make = NSSelectorFromString(@"initWithType:textType:value:");
     if (![rowClass instancesRespondToSelector:make]) return;
@@ -335,7 +335,7 @@ static void OhrtPostAddRow(id model, id media) {
     if (hidden) {
         objc_setAssociatedObject(ours, &kOhrtRowHiddenKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(ours, &kOhrtRowMediaKey, OhrtMediaId(media), OBJC_ASSOCIATION_COPY_NONATOMIC);
-        OhrtLikesWant(media);
+        OhrtLikesDescribe(media);
     }
     NSMutableArray *with = [rows mutableCopy];
     [with insertObject:ours atIndex:buttons + 1];
@@ -384,9 +384,12 @@ static void OhrtPostAddRow(id model, id media) {
     if (![context respondsToSelector:dequeue]) return %orig;
     OhrtPostFactsCell *cell = ((id (*)(id, SEL, Class, id, NSInteger))objc_msgSend)(context, dequeue, [OhrtPostFactsCell class], self, index);
     if ([cell isKindOfClass:[OhrtPostFactsCell class]]) {
+        cell.mediaId = objc_getAssociatedObject(row, &kOhrtRowMediaKey);
+        // The post is on screen: its hidden likes are read now, ahead of
+        // any waiting.
+        if (cell.mediaId && !OhrtLikesCountedFor(cell.mediaId)) OhrtLikesWant(cell.mediaId);
         cell.label.text = OhrtPostShown(row);
         cell.row = row;
-        cell.mediaId = objc_getAssociatedObject(row, &kOhrtRowMediaKey);
         cell.controller = self;
         if (!gOhrtPostCells) gOhrtPostCells = [NSHashTable weakObjectsHashTable];
         [gOhrtPostCells addObject:cell];

@@ -62,14 +62,15 @@ FOUNDATION_EXPORT void OhrtInstallLikes(void);
 FOUNDATION_EXPORT void OhrtInstallPostFacts(void);
 // The like count of a post that hides it, as counted from who liked it
 // (OhrtLikes.x), such as "1,234 likes", or nil until that has been read.
-// OhrtLikesWant asks for it to be read; when it has been, or could not be,
-// kOhrtLikesCountedNotification is posted on the main thread with the
-// post's id as its object.
+// OhrtLikesWant asks for it to be read, and OhrtLikesPending says whether
+// it is waiting to be; both main thread. When it has been read, or has
+// left the queue unread, kOhrtLikesCountedNotification is posted on the
+// main thread with the post's id as its object.
 FOUNDATION_EXPORT NSString *OhrtMediaId(id media);
-FOUNDATION_EXPORT NSString *OhrtLikesCounted(id media);
 FOUNDATION_EXPORT NSString *OhrtLikesCountedFor(NSString *mediaId);
-FOUNDATION_EXPORT void OhrtLikesWant(id media);
+FOUNDATION_EXPORT void OhrtLikesWant(NSString *mediaId);
 FOUNDATION_EXPORT BOOL OhrtLikesPending(NSString *mediaId);
+FOUNDATION_EXPORT void OhrtLikesDescribe(id media);
 FOUNDATION_EXPORT NSString *const kOhrtLikesCountedNotification;
 
 // The small red text of the facts lines (OhrtFacts.x), on a profile and
@@ -80,7 +81,6 @@ FOUNDATION_EXPORT UIColor *OhrtFactsLineColour(void);
 // What has changed on a profile since you last opened it (OhrtLooks.m), as
 // facts for its line. Notes what it says now. Main thread.
 FOUNDATION_EXPORT NSArray<NSString *> *OhrtLookedChanges(id user, NSString *pk);
-FOUNDATION_EXPORT void OhrtLooksSaveNow(void);
 
 // What a feature needs from the Instagram that is running (OhrtNeeds.m).
 FOUNDATION_EXPORT NSString *OhrtMissing(NSString *feature);
@@ -156,4 +156,6 @@ FOUNDATION_EXPORT BOOL OhrtCallBool(id object, NSString *selector);
 // What `object` answers to `selector` as an object, whatever kind of value
 // the method returns (a number comes back as an NSNumber), or nil.
 FOUNDATION_EXPORT id OhrtCallValue(id object, NSString *selector);
+// 12347 as "12,347".
+FOUNDATION_EXPORT NSString *OhrtGrouped(long long count);
 FOUNDATION_EXPORT void OhrtCallVoid(id object, NSString *selector);

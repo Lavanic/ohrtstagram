@@ -64,12 +64,6 @@ UIColor *OhrtFactsLineColour(void) {
     return OhrtFactsColour();
 }
 
-static NSString *OhrtGrouped(long long count) {
-    char text[32];
-    OhrtGroupDigits(count, text, sizeof(text));
-    return @(text);
-}
-
 static CGFloat OhrtFactsTextHeight(NSString *text, CGFloat width) {
     if (!text.length || !(width >= 40)) return 0;
     CGRect box = [text boundingRectWithSize:CGSizeMake(width, CGFLOAT_MAX)
