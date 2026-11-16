@@ -44,6 +44,9 @@ static void time_budget(void) {
     CHECK("the end of an address is not the name", !OhrtNameStandsAlone('.', ' ', ' '));
     CHECK("a longer word is not the name", !OhrtNameStandsAlone(' ', 'm', 'e'));
     CHECK("the end of a longer word is not the name", !OhrtNameStandsAlone('y', ' ', ' '));
+    CHECK("another of their apps keeps their name", OhrtNameIsTheirProduct(" for iPad"));
+    CHECK("and so does one cut short", OhrtNameIsTheirProduct(" for iPa"));
+    CHECK("ordinary words after the name do not", !OhrtNameIsTheirProduct(" is great") && !OhrtNameIsTheirProduct("") && !OhrtNameIsTheirProduct(" form"));
 
     CHECK("no budget never locks", !OhrtOverBudget(999999, 0, 0));
     CHECK("under budget", !OhrtOverBudget(29 * 60, 30, 0));

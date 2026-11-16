@@ -8,6 +8,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 // Time budget
 
@@ -57,6 +58,13 @@ static inline int OhrtNameStandsAlone(unsigned before, unsigned after, unsigned 
     if (OhrtIsLetterOrDigit(after)) return 0;
     if (after == '.' && OhrtIsLetterOrDigit(next)) return 0;
     return 1;
+}
+
+// Whether the words after "Instagram" make it the name of something of
+// Instagram's own, which is not ours to rename: "Instagram for iPad" is
+// another app, and calling it ours would mislead.
+static inline int OhrtNameIsTheirProduct(const char *after) {
+    return strncmp(after, " for ", 5) == 0;
 }
 
 // Caught up wall

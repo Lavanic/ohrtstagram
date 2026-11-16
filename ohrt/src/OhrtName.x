@@ -6,7 +6,8 @@
 // pass through here, so their words are left as they wrote them. A label
 // can still hold a person's words now and then, and those change too.
 //
-// Left alone: "Instagram" inside a longer word, an address or a handle
+// Left alone: "Instagram" inside a longer word, an address or a handle, and
+// in the name of another of Instagram's apps, "Instagram for iPad"
 // (OhrtLogic.h says which), and the word as our own screens write it when
 // they mean Instagram itself (Ohrt.h says how).
 #import "Ohrt.h"
@@ -35,7 +36,8 @@ static NSArray<NSValue *> *OhrtNamePlaces(NSString *text) {
         unichar before = found.location > 0 ? [text characterAtIndex:found.location - 1] : ' ';
         unichar after = end < length ? [text characterAtIndex:end] : ' ';
         unichar next = end + 1 < length ? [text characterAtIndex:end + 1] : ' ';
-        if (OhrtNameStandsAlone(before, after, next)) {
+        NSString *following = [text substringWithRange:NSMakeRange(end, MIN((NSUInteger)8, length - end))];
+        if (OhrtNameStandsAlone(before, after, next) && !OhrtNameIsTheirProduct(following.UTF8String ?: "")) {
             if (!places) places = [NSMutableArray array];
             [places addObject:[NSValue valueWithRange:found]];
         }
