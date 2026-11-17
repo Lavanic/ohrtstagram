@@ -240,7 +240,7 @@ def command_wordmark(source, target):
     """Turns the wordmark's drawing into the picture the app carries.
 
     Cut to what is drawn, and 240 pixels tall, which is more than any screen
-    shows it at. Only its shape is used: the app colours it. Run by hand when
+    shows it at. Only its shape is used: the app colors it. Run by hand when
     the drawing changes. The picture is kept in the repository so that a
     build does not need rsvg-convert.
     """

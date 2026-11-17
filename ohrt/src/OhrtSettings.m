@@ -61,7 +61,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         OhrtSection(@"Look", @[
             OhrtRestartSwitch(@"ohrtstagram marks", @"Our wordmark at the top of the home feed and our mark on the login screen", kOhrtWordmarkKey),
             OhrtRestartSwitch(@"ohrtstagram in text", @"Buttons, titles and menus say ohrtstagram", kOhrtNameKey),
-            OhrtSwitch(@"Grayscale", @"Shows the whole app in grey", kOhrtGrayscaleKey),
+            OhrtSwitch(@"Grayscale", @"Shows the whole app in gray", kOhrtGrayscaleKey),
             OhrtRestartSwitch(@"About you tab", @"A tab after home with what Insta\u2060gram keeps about you", kOhrtAboutTabKey),
         ], nil),
     ];
@@ -85,7 +85,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
                 OhrtSwitch(@"Hide Meta AI", @"Hides the Meta AI buttons and suggestions", @"hide_meta_ai"),
                 OhrtSwitch(@"Copy description", @"Hold a caption or bio to copy it", @"copy_description"),
                 OhrtSwitch(@"Do not save recent searches", @"Search bars stop remembering what you looked for", @"no_recent_searches"),
-                OhrtSwitch(@"Detailed color picker", @"Hold the eyedropper in the story editor for any colour", @"detailed_color_picker"),
+                OhrtSwitch(@"Detailed color picker", @"Hold the eyedropper in the story editor for any color", @"detailed_color_picker"),
                 OhrtRestartSwitch(@"Liquid glass buttons", @"Insta\u2060gram's experimental glass buttons", @"liquid_glass_buttons"),
                 OhrtRestartSwitch(@"Liquid glass surfaces", @"The same for menus and other surfaces", @"liquid_glass_surfaces"),
             ], nil),
@@ -93,7 +93,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
                 OhrtSwitch(@"Hide notes tray", @"Hides the notes above your messages", @"hide_notes_tray"),
                 OhrtSwitch(@"Hide friends map", @"Hides the map in the notes tray", @"hide_friends_map"),
                 OhrtSwitch(@"Note theming", @"Turns on the notes theme picker", @"enable_notes_customization"),
-                OhrtSwitch(@"Custom note themes", @"Your own emoji and colours for notes", @"custom_note_themes"),
+                OhrtSwitch(@"Custom note themes", @"Your own emoji and colors for notes", @"custom_note_themes"),
             ], nil),
             OhrtSection(@"Suggestions", @[
                 OhrtSwitch(@"No suggested users", @"Hides accounts suggested for you to follow, outside the feed", @"no_suggested_users"),

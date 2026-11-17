@@ -1,5 +1,5 @@
 // Upstream takes the suggested accounts out of a profile's header, but
-// leaves the grey block that stands in for them while they load. With the
+// leaves the gray block that stands in for them while they load. With the
 // accounts gone nothing ever takes its place, so it stays as a blank gap.
 // It goes out with them, under the same switch.
 #import "../../src/Utils.h"

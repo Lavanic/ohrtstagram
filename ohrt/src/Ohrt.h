@@ -103,7 +103,7 @@ FOUNDATION_EXPORT NSString *const kOhrtLikesCountedNotification;
 // The small red text of the facts lines (OhrtFacts.x), on a profile and
 // under a post.
 FOUNDATION_EXPORT UIFont *OhrtFactsLineFont(void);
-FOUNDATION_EXPORT UIColor *OhrtFactsLineColour(void);
+FOUNDATION_EXPORT UIColor *OhrtFactsLineColor(void);
 
 // What has changed on a profile since you last opened it (OhrtLooks.m), as
 // facts for its line. Notes what it says now. Main thread.

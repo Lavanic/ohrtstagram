@@ -32,7 +32,7 @@
 NSString *const kOhrtFactsKey = @"ohrt_facts";
 
 // The red of the calico jack, #ff0349, made light enough to read on a
-// dark page: that colour was wanted, less harsh, then lighter. On a light
+// dark page: that color was wanted, less harsh, then lighter. On a light
 // page it is the red itself.
 static const uint32_t kOhrtFactsOnDark = 0xff8aa6;
 static const uint32_t kOhrtFactsOnLight = 0xff0349;
@@ -52,7 +52,7 @@ static UIFont *OhrtFactsFont(void) {
     return [UIFont systemFontOfSize:11];
 }
 
-static UIColor *OhrtFactsColour(void) {
+static UIColor *OhrtFactsColor(void) {
     return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
         return OhrtColor(traits.userInterfaceStyle == UIUserInterfaceStyleDark ? kOhrtFactsOnDark : kOhrtFactsOnLight);
     }];
@@ -62,8 +62,8 @@ UIFont *OhrtFactsLineFont(void) {
     return OhrtFactsFont();
 }
 
-UIColor *OhrtFactsLineColour(void) {
-    return OhrtFactsColour();
+UIColor *OhrtFactsLineColor(void) {
+    return OhrtFactsColor();
 }
 
 static CGFloat OhrtFactsTextHeight(NSString *text, CGFloat width) {
@@ -413,7 +413,7 @@ static NSString *OhrtAddRankings(NSMutableArray<NSString *> *facts, NSMutableArr
 }
 
 // The account's story in your tray now, if it has one: how likely Instagram
-// reckons you are to tap it, which is one of the scores it ranks the tray
+// thinks you are to tap it, which is one of the scores it ranks the tray
 // with, and whether it is for close friends, which means you are on their
 // list.
 static void OhrtAddTray(NSMutableArray<NSString *> *facts, NSMutableArray<NSString *> *fields, NSString *pk) {
@@ -581,7 +581,7 @@ static NSString *OhrtFactsText(id user) {
         _side = kOhrtFactsSide;
         _label = [UILabel new];
         _label.font = OhrtFactsFont();
-        _label.textColor = OhrtFactsColour();
+        _label.textColor = OhrtFactsColor();
         _label.numberOfLines = 0;
         _label.lineBreakMode = NSLineBreakByWordWrapping;
         [self.contentView addSubview:_label];

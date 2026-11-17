@@ -322,7 +322,7 @@ static NSHashTable<OhrtPostFactsCell *> *gOhrtPostCells;
     if ((self = [super initWithFrame:frame])) {
         _label = [UILabel new];
         _label.font = OhrtFactsLineFont();
-        _label.textColor = OhrtFactsLineColour();
+        _label.textColor = OhrtFactsLineColor();
         _label.numberOfLines = 0;
         _label.lineBreakMode = NSLineBreakByWordWrapping;
         [self.contentView addSubview:_label];

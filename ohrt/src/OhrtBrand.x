@@ -54,7 +54,7 @@ static UIImage *OhrtWordmarkSource(void) {
     return image;
 }
 
-// The calico jack in the icon's colours, as on the launch screen.
+// The calico jack in the icon's colors, as on the launch screen.
 static UIImage *OhrtGlyphSource(void) {
     static UIImage *image;
     static dispatch_once_t once;
@@ -108,7 +108,7 @@ static CGRect OhrtInkBounds(UIImage *image) {
 
 // `source` standing in for `theirs`: a picture of the same size, with ours
 // as large as fits inside the part of theirs that is drawn on, times
-// `grow`, and centred there. Grown past theirs, the picture grows with it,
+// `grow`, and centered there. Grown past theirs, the picture grows with it,
 // evenly on each side. `what` names it in the log.
 //
 // `level`, when it is a number, says where the middle of ours is to sit up
@@ -161,7 +161,7 @@ static UIImage *OhrtMarkLike(UIImage *source, UIImage *theirs, BOOL template, NS
     [made setObject:ours forKey:key];
     OhrtLog(@"brand: the %@ is %.0f by %.0f in place of theirs of %.0f by %.0f, which is drawn on over %.0f by %.0f; %@", what, size.width, size.height,
             theirSize.width, theirSize.height, ink.size.width, ink.size.height,
-            isnan(level) ? @"centred on theirs" : [NSString stringWithFormat:@"its letters' middle %.1f below the picture's, in a picture %.0f tall", level, canvas.height]);
+            isnan(level) ? @"centered on theirs" : [NSString stringWithFormat:@"its letters' middle %.1f below the picture's, in a picture %.0f tall", level, canvas.height]);
     return ours;
 }
 
@@ -207,7 +207,7 @@ static void OhrtPutWordmark(UIView *header) {
     BOOL isOurs = objc_getAssociatedObject(shown, &kOhrtOursKey) != nil;
     UIImage *theirs = isOurs ? objc_getAssociatedObject(shown, &kOhrtTheirsKey) : shown;
     if (!theirs) return;
-    // The button colours the picture, as it does theirs.
+    // The button colors the picture, as it does theirs.
     UIImage *ours = OhrtMarkLike(OhrtWordmarkSource(), theirs, YES, @"wordmark", kOhrtWordmarkGrow, OhrtHeaderLevel(header, button), kOhrtWordmarkMiddle);
     if (!ours || ours == shown) return;
     // Ours is redrawn when the level it should sit at turns out different.
@@ -240,7 +240,7 @@ static void OhrtNoteAsset(NSString *name, UIImage *image) {
         [noted addObject:name];
     }
     OhrtLog(@"brand: the app asked for its picture %@, %.0f by %.0f%@", name, image.size.width, image.size.height,
-            image.renderingMode == UIImageRenderingModeAlwaysTemplate ? @", to be coloured" : @"");
+            image.renderingMode == UIImageRenderingModeAlwaysTemplate ? @", to be colored" : @"");
 }
 
 static BOOL OhrtLooksBranded(NSString *name) {

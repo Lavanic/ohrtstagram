@@ -5,7 +5,7 @@
 //    kept in the session's defaults under "personalization_features": about
 //    a hundred numbers and labels, such as a predicted age, a reels cohort,
 //    the time spent and the rates at which you like and share;
-//  - how many minutes Instagram's on-device model reckons it will be until
+//  - how many minutes Instagram's on-device model thinks it will be until
 //    you next open the app (IGCasper), asked as the screen appears;
 //  - the accounts with the highest bestie_coefficient, the score its servers
 //    give each account you might want to reach.
@@ -13,7 +13,7 @@
 //
 // The screen is drawn as a terminal program would draw it: one size of
 // monospaced type on a grid of 56 columns, boxes with their titles in the
-// border, and meters made of dots, in the colours of Oliver's btop theme.
+// border, and meters made of dots, in the colors of Oliver's btop theme.
 // Nothing else in the app is styled this way.
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -313,38 +313,38 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
     return CGRectZero;
 }
 
-- (void)put:(NSString *)text row:(NSInteger)row column:(NSInteger)column colour:(uint32_t)colour bold:(BOOL)bold {
+- (void)put:(NSString *)text row:(NSInteger)row column:(NSInteger)column color:(uint32_t)color bold:(BOOL)bold {
     if (!text.length) return;
     UIFont *font = bold ? _bold : _plain;
-    [text drawAtPoint:CGPointMake([self x:column], [self y:row] + (_ch - font.lineHeight) / 2) withAttributes:@{NSFontAttributeName : font, NSForegroundColorAttributeName : OhrtAboutHex(colour)}];
+    [text drawAtPoint:CGPointMake([self x:column], [self y:row] + (_ch - font.lineHeight) / 2) withAttributes:@{NSFontAttributeName : font, NSForegroundColorAttributeName : OhrtAboutHex(color)}];
 }
 
-- (void)put:(NSString *)text row:(NSInteger)row end:(NSInteger)end colour:(uint32_t)colour bold:(BOOL)bold {
-    [self put:text row:row column:end - (NSInteger)text.length colour:colour bold:bold];
+- (void)put:(NSString *)text row:(NSInteger)row end:(NSInteger)end color:(uint32_t)color bold:(BOOL)bold {
+    [self put:text row:row column:end - (NSInteger)text.length color:color bold:bold];
 }
 
 // A label at `column` and its value ending before `column + width`.
-- (void)pair:(OhrtAboutRow *)item row:(NSInteger)row column:(NSInteger)column width:(NSInteger)width label:(uint32_t)label value:(uint32_t)colour bold:(BOOL)bold {
+- (void)pair:(OhrtAboutRow *)item row:(NSInteger)row column:(NSInteger)column width:(NSInteger)width label:(uint32_t)label value:(uint32_t)color bold:(BOOL)bold {
     NSString *value = OhrtAboutFit([item.value stringByReplacingOccurrencesOfString:@"_" withString:@" "], width - 4);
-    [self put:OhrtAboutFit(item.label, width - (NSInteger)value.length - (value.length ? 1 : 0)) row:row column:column colour:label bold:NO];
-    [self put:value row:row end:column + width colour:colour bold:bold];
+    [self put:OhrtAboutFit(item.label, width - (NSInteger)value.length - (value.length ? 1 : 0)) row:row column:column color:label bold:NO];
+    [self put:value row:row end:column + width color:color bold:bold];
 }
 
 // btop's meters are braille: each cell is two columns of four dots. They
 // are drawn as dots here, since the phone's monospaced face borrows its
 // braille from another one of a different width.
-- (void)meter:(double)part row:(NSInteger)row column:(NSInteger)column cells:(NSInteger)cells colours:(const uint32_t *)stops count:(int)count {
+- (void)meter:(double)part row:(NSInteger)row column:(NSInteger)column cells:(NSInteger)cells colors:(const uint32_t *)stops count:(int)count {
     NSInteger total = cells * 2, lit = part > 0 ? MAX(1, (NSInteger)lround(MIN(1, part) * total)) : 0;
     CGContextRef context = UIGraphicsGetCurrentContext();
     CGFloat radius = _cw * 0.15;
     for (NSInteger dot = 0; dot < total; dot++) {
-        uint32_t colour = kOhrtAboutOff;
+        uint32_t color = kOhrtAboutOff;
         if (dot < lit) {
             double along = total > 1 ? (double)dot / (total - 1) : 0;
-            if (count == 1) colour = stops[0];
-            else colour = along < 0.5 ? OhrtAboutMix(stops[0], stops[1], along * 2) : OhrtAboutMix(stops[1], stops[2], (along - 0.5) * 2);
+            if (count == 1) color = stops[0];
+            else color = along < 0.5 ? OhrtAboutMix(stops[0], stops[1], along * 2) : OhrtAboutMix(stops[1], stops[2], (along - 0.5) * 2);
         }
-        CGContextSetFillColorWithColor(context, OhrtAboutHex(colour).CGColor);
+        CGContextSetFillColorWithColor(context, OhrtAboutHex(color).CGColor);
         CGFloat x = [self x:column + dot / 2] + _cw * (dot % 2 ? 0.75 : 0.25);
         for (int down = 0; down < 4; down++) {
             CGFloat y = [self y:row] + _ch * (0.2 + 0.2 * down);
@@ -389,10 +389,10 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
     [path addLineToPoint:CGPointMake(right - round, bottom)];
     [OhrtAboutHex(kOhrtAboutBorder) setStroke];
     [path stroke];
-    [self put:[title substringToIndex:title.length - box.title.length] row:first column:2 colour:kOhrtAboutIndex bold:YES];
-    [self put:box.title row:first column:2 + (NSInteger)(title.length - box.title.length) colour:kOhrtAboutWhite bold:YES];
-    [self put:box.note row:first column:noteAt colour:kOhrtAboutDim bold:NO];
-    [self put:box.foot row:last column:footAt colour:kOhrtAboutDim bold:NO];
+    [self put:[title substringToIndex:title.length - box.title.length] row:first column:2 color:kOhrtAboutIndex bold:YES];
+    [self put:box.title row:first column:2 + (NSInteger)(title.length - box.title.length) color:kOhrtAboutWhite bold:YES];
+    [self put:box.note row:first column:noteAt color:kOhrtAboutDim bold:NO];
+    [self put:box.foot row:last column:footAt color:kOhrtAboutDim bold:NO];
 }
 
 // Only the boxes the rectangle touches are drawn, so that one box filling
@@ -405,8 +405,8 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
     _hitsStale = NO;
     const NSInteger columns = kOhrtAboutColumns, inner = columns - 4, middle = columns / 2;
     if (CGRectGetMinY(rect) < [self y:1]) {
-        [self put:@"hidden account data" row:0 column:1 colour:kOhrtAboutWhite bold:YES];
-        [self put:[@"ohrtstagram " stringByAppendingString:OHRT_VERSION] row:0 end:columns - 1 colour:kOhrtAboutDim bold:NO];
+        [self put:@"hidden account data" row:0 column:1 color:kOhrtAboutWhite bold:YES];
+        [self put:[@"ohrtstagram " stringByAppendingString:OHRT_VERSION] row:0 end:columns - 1 color:kOhrtAboutDim bold:NO];
     }
     static const uint32_t rates[] = {0xf05050, 0xff40b6, 0x4897d4, 0x50f095, 0xf0c050};
     static const uint32_t close[] = {0x4897d4, 0x8080ff, 0xff40b6};
@@ -441,15 +441,15 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
                     [self pair:item row:line column:second ? middle + 1 : 2 width:second ? columns - middle - 3 : middle - 4 label:kOhrtAboutText value:kOhrtAboutWhite bold:YES];
                     break;
                 case OhrtAboutKindRates:
-                    [self put:OhrtAboutFit(item.label, 24) row:line column:2 colour:kOhrtAboutText bold:NO];
-                    [self meter:item.part * filled row:line column:27 cells:20 colours:&rates[place % 5] count:1];
-                    [self put:filled >= 1 ? item.value : OhrtAboutRate(@(item.part * filled)) row:line end:columns - 2 colour:kOhrtAboutWhite bold:YES];
+                    [self put:OhrtAboutFit(item.label, 24) row:line column:2 color:kOhrtAboutText bold:NO];
+                    [self meter:item.part * filled row:line column:27 cells:20 colors:&rates[place % 5] count:1];
+                    [self put:filled >= 1 ? item.value : OhrtAboutRate(@(item.part * filled)) row:line end:columns - 2 color:kOhrtAboutWhite bold:YES];
                     break;
                 case OhrtAboutKindRanked:
-                    if (item.place) [self put:OhrtGrouped((long long)item.place) row:line end:7 colour:kOhrtAboutDim bold:NO];
-                    [self put:OhrtAboutFit(item.label, 18) row:line column:8 colour:kOhrtAboutName bold:NO];
-                    [self meter:item.part * filled row:line column:27 cells:22 colours:close count:3];
-                    if (!box.loading) [self put:filled >= 1 ? item.value : [NSString stringWithFormat:@"%.0f", item.part * filled * 100] row:line end:columns - 2 colour:kOhrtAboutWhite bold:YES];
+                    if (item.place) [self put:OhrtGrouped((long long)item.place) row:line end:7 color:kOhrtAboutDim bold:NO];
+                    [self put:OhrtAboutFit(item.label, 18) row:line column:8 color:kOhrtAboutName bold:NO];
+                    [self meter:item.part * filled row:line column:27 cells:22 colors:close count:3];
+                    if (!box.loading) [self put:filled >= 1 ? item.value : [NSString stringWithFormat:@"%.0f", item.part * filled * 100] row:line end:columns - 2 color:kOhrtAboutWhite bold:YES];
                     break;
                 case OhrtAboutKindRaw:
                     [self pair:item row:line column:2 width:inner label:kOhrtAboutDim value:kOhrtAboutText bold:NO];
@@ -464,7 +464,7 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
             [divide stroke];
         } else if (box.under.length) {
             NSInteger line = row + 1 + (NSInteger)box.rows.count;
-            if (seen) [self put:OhrtAboutFit(box.under, inner) row:line column:2 colour:kOhrtAboutDim bold:NO];
+            if (seen) [self put:OhrtAboutFit(box.under, inner) row:line column:2 color:kOhrtAboutDim bold:NO];
             if (collect && box.rows.count && box.rows[0].about.length) [_hits addObject:@[ [NSValue valueWithCGRect:CGRectMake([self x:1], [self y:line], (columns - 2) * _cw, _ch)], box.rows[0] ]];
         }
         row += lines + 2;
@@ -812,7 +812,7 @@ static NSString *OhrtAboutBestieMeaning(NSUInteger scored) {
     OhrtAboutAdd(rows, f, @"reels tier", @"reels_user_cohort_segment_based_on_play_v2", NULL,
                  @"A tier based on how much you play reels. The scale is not in the app, so what the number is out of is not known.");
     OhrtAboutAdd(rows, f, @"predicted age", @"user_predicted_age", NULL,
-                 @"The age Insta⁠gram reckons you are. Meta has said it uses a model that estimates age from things like how old an account is and how it is used. Whether this number is that model's "
+                 @"The age Insta⁠gram thinks you are. Meta has said it uses a model that estimates age from things like how old an account is and how it is used. Whether this number is that model's "
                  @"answer is not confirmed.");
     OhrtAboutAdd(rows, f, @"gender", @"gender", OhrtAboutGender,
                  @"The gender on file for you, in the codes of Insta⁠gram's own gender setting: 1 male, 2 female, 3 prefer not to say, 4 custom. Whether it copies what you set or is predicted cannot be "

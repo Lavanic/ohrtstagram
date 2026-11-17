@@ -1,4 +1,4 @@
-// Grayscale: the whole app in grey, by a saturation filter on each of its
+// Grayscale: the whole app in gray, by a saturation filter on each of its
 // windows. It costs some smoothness while it is on: a filtered window is
 // drawn off screen first. Nothing here touches Instagram's classes.
 #import <QuartzCore/QuartzCore.h>
