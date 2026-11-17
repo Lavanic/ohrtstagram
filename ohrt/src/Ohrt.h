@@ -60,6 +60,12 @@ FOUNDATION_EXPORT void OhrtInstallSuggested(void);
 FOUNDATION_EXPORT void OhrtInstallMessages(void);
 FOUNDATION_EXPORT void OhrtInstallLikes(void);
 FOUNDATION_EXPORT void OhrtInstallPostFacts(void);
+FOUNDATION_EXPORT void OhrtInstallFixes(void);
+// Makes one of upstream's switches read as off on this thread until the
+// matching End, which takes what Begin returned. The key must outlive the
+// pair: pass a literal.
+FOUNDATION_EXPORT void *OhrtPrefOffBegin(NSString *key);
+FOUNDATION_EXPORT void OhrtPrefOffEnd(void *before);
 
 // The like count of a post that hides it, counted from who liked it
 // (OhrtLikes.x): the number, and whether it is only a floor; NO until it

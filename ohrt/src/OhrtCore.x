@@ -43,6 +43,20 @@ NSString *OhrtGrouped(long long count) {
     return @(text);
 }
 
+// One of upstream's switches, read as off on this thread for the length of
+// a call (OhrtFixes.x).
+static __thread void *tOhrtPrefOff;
+
+void *OhrtPrefOffBegin(NSString *key) {
+    void *before = tOhrtPrefOff;
+    tOhrtPrefOff = (__bridge void *)key;
+    return before;
+}
+
+void OhrtPrefOffEnd(void *before) {
+    tOhrtPrefOff = before;
+}
+
 id OhrtCallValue(id object, NSString *selector) {
     SEL sel = NSSelectorFromString(selector);
     if (!object || ![object respondsToSelector:sel]) return nil;
@@ -155,6 +169,7 @@ static void OhrtAppLaunching(void) {
     OhrtInstallMessages();
     OhrtInstallLikes();
     OhrtInstallPostFacts();
+    OhrtInstallFixes();
     OhrtInstallSuggested();
     OhrtInstallDMMode();
     OhrtInstallFollowing();
@@ -232,6 +247,7 @@ __attribute__((constructor)) static void OhrtCoreLoad(void) {
     // one switch alone. "Start with everything off" still turns it off.
     if ([key isEqualToString:@"disable_safe_mode"] && !OhrtSafeForced()) return %orig;
     if (OhrtSafeLaunch()) return NO;
+    if (tOhrtPrefOff && [(__bridge NSString *)tOhrtPrefOff isEqualToString:key]) return NO;
     if ([key isEqualToString:@"hide_feed_tab"] && OhrtBool(kOhrtDMModeKey)) {
         static BOOL available;
         static dispatch_once_t once;
