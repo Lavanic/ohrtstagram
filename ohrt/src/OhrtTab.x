@@ -140,6 +140,9 @@ static void OhrtTabInsert(UIViewController *controller) {
     SEL add = NSSelectorFromString(@"addTabButton:"), clear = NSSelectorFromString(@"clearTabButtons");
     NSArray *buttons = OhrtTabButtons(bar);
     if (!buttons.count || ![bar respondsToSelector:add] || ![bar respondsToSelector:clear]) return;
+    // A new tab bar, as after switching account: the screen on the old one
+    // is closed while that one is still known.
+    if (controller != gOhrtTabController) OhrtTabClose();
     gOhrtTabController = controller;
     if (gOhrtTabButton && [buttons containsObject:gOhrtTabButton]) {
         gOhrtTabIndex = [buttons indexOfObject:gOhrtTabButton];
