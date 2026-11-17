@@ -1,9 +1,9 @@
 // Facts on a profile: a few small lines above the Follow and Message
 // buttons, of what the app holds about the account and does not show.
 //
-//   id 1234567890, creator, follows you since 2019-03-05, followed since 2019-03-02,
-//   you liked 214 posts (last 2026-10-30), commented 12 times, watched 88 stories since 2026-11-15,
-//   340 messages between you since 2020-01-10, story 3h ago
+//   id 1234567890, creator, follows you since 03.05.19, followed since 03.02.19,
+//   you liked 214 posts (last 10.30.26), commented 12 times, watched 88 stories since 11.15.26,
+//   340 messages between you since 01.10.20, story 3h ago
 //
 // There are two sources, and nothing is asked of Instagram for either. The
 // first is what the app already holds when a profile opens: the id, the
@@ -99,7 +99,7 @@ static NSString *OhrtDay(NSDate *date) {
     dispatch_once(&once, ^{
         formatter = [NSDateFormatter new];
         formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
-        formatter.dateFormat = @"yyyy-MM-dd";
+        formatter.dateFormat = @"MM.dd.yy";
     });
     return [formatter stringFromDate:date];
 }
@@ -137,7 +137,7 @@ static NSInteger OhrtCountOf(NSString *kind, NSDictionary *past, NSString *pk, N
     return count;
 }
 
-// "liked 214 posts (last 2026-10-30)". The first of these on a line is
+// "liked 214 posts (last 10.30.26)". The first of these on a line is
 // given its "you" by the caller.
 static void OhrtAddDone(NSMutableArray<NSString *> *done, NSString *kind, NSDictionary *past, NSString *pk, NSString *verb, NSString *one, NSString *many, BOOL withLast) {
     NSTimeInterval last = 0;

@@ -1,6 +1,6 @@
 // What a profile was like the last time you opened it, so that its line
-// can say what has changed since: "+12 followers since 2026-11-10",
-// "was @old on 2026-11-10".
+// can say what has changed since: "+12 followers since 11.10.26",
+// "was @old on 11.10.26".
 //
 // Each time a profile's header is shown, what it says now (username, name,
 // bio, picture, private or not, and its three counts) is noted under the
@@ -126,7 +126,7 @@ static NSString *OhrtLookWhen(id seconds) {
     dispatch_once(&once, ^{
         day = [NSDateFormatter new];
         day.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
-        day.dateFormat = @"yyyy-MM-dd";
+        day.dateFormat = @"MM.dd.yy";
         time = [NSDateFormatter new];
         time.locale = day.locale;
         time.dateFormat = @"HH:mm";
