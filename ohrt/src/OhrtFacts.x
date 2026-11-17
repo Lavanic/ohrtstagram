@@ -504,6 +504,7 @@ static NSString *OhrtFactsText(id user) {
     OhrtProbeSession();
     NSString *pk = OhrtText(OhrtCall(user, @"pk"));
     if (!pk.length) return nil;
+    OhrtProbeUser(user, [pk isEqualToString:OhrtMyAccount()]);
     NSMutableArray<NSString *> *facts = [NSMutableArray arrayWithObject:[@"id " stringByAppendingString:pk]];
 
     NSString *type = OhrtCallBool(user, @"isBusinessAccountType") ? @"business"
