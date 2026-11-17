@@ -66,6 +66,10 @@ FOUNDATION_EXPORT void OhrtInstallTab(void);
 // The "about you" screen (OhrtAbout.m).
 // `bottomRoom` is how much of the bottom the tab bar covers.
 FOUNDATION_EXPORT UIViewController *OhrtAboutScreen(CGFloat bottomRoom);
+// The screen is kept between visits. It is told when it is shown again, to
+// read everything afresh, and when its tab is pressed while it is open.
+FOUNDATION_EXPORT void OhrtAboutShown(UIViewController *screen, CGFloat bottomRoom);
+FOUNDATION_EXPORT void OhrtAboutToTop(UIViewController *screen);
 
 // Log-only probes of what Instagram holds and does not show (OhrtProbe.m).
 FOUNDATION_EXPORT void OhrtProbeSession(void);

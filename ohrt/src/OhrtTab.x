@@ -86,10 +86,17 @@ static BOOL OhrtTabHasOurs(UIView *bar) {
     return gOhrtTabButton && gOhrtTabIndex != NSNotFound && gOhrtTabButton.superview && [gOhrtTabButton isDescendantOfView:bar];
 }
 
+// The screen last shown, kept so that it comes back where it was left, and
+// the tab bar controller it was shown on.
+static UIViewController *gOhrtTabKept;
+static __weak UIViewController *gOhrtTabKeptOn;
+
 static void OhrtTabClose(void) {
     UIViewController *screen = gOhrtTabScreen;
     if (!screen) return;
     gOhrtTabScreen = nil;
+    gOhrtTabKept = screen;
+    gOhrtTabKeptOn = gOhrtTabController;
     [screen willMoveToParentViewController:nil];
     [screen.view removeFromSuperview];
     [screen removeFromParentViewController];
@@ -105,8 +112,9 @@ static void OhrtTabClose(void) {
 
 - (void)pressed {
     OhrtTry(@"about tab", ^{
+        // Pressed while open: as Instagram's own tabs do, up to the top.
         if (gOhrtTabScreen) {
-            OhrtTabClose();
+            OhrtAboutToTop(gOhrtTabScreen);
             return;
         }
         UIViewController *controller = gOhrtTabController;
@@ -119,7 +127,11 @@ static void OhrtTabClose(void) {
             if (button != gOhrtTabButton && [button isKindOfClass:[UIControl class]] && [(UIControl *)button isSelected]) gOhrtTabBefore = index;
         }
         CGRect barFrame = [bar convertRect:bar.bounds toView:controller.view];
-        UIViewController *screen = OhrtAboutScreen(MAX(0, controller.view.bounds.size.height - barFrame.origin.y));
+        CGFloat bottomRoom = MAX(0, controller.view.bounds.size.height - barFrame.origin.y);
+        UIViewController *screen = gOhrtTabKeptOn == controller ? gOhrtTabKept : nil;
+        gOhrtTabKept = nil;
+        if (screen) OhrtAboutShown(screen, bottomRoom);
+        else screen = OhrtAboutScreen(bottomRoom);
         [controller addChildViewController:screen];
         screen.view.frame = controller.view.bounds;
         screen.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -142,7 +154,10 @@ static void OhrtTabInsert(UIViewController *controller) {
     if (!buttons.count || ![bar respondsToSelector:add] || ![bar respondsToSelector:clear]) return;
     // A new tab bar, as after switching account: the screen on the old one
     // is closed while that one is still known.
-    if (controller != gOhrtTabController) OhrtTabClose();
+    if (controller != gOhrtTabController) {
+        OhrtTabClose();
+        gOhrtTabKept = nil;
+    }
     gOhrtTabController = controller;
     if (gOhrtTabButton && [buttons containsObject:gOhrtTabButton]) {
         gOhrtTabIndex = [buttons indexOfObject:gOhrtTabButton];

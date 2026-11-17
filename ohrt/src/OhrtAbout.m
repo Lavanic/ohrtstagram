@@ -49,7 +49,15 @@ static NSString *OhrtAboutNumber(id value) {
     if ([value isKindOfClass:[NSString class]]) return value;
     double number = [value doubleValue];
     if (number == floor(number) && fabs(number) < 1e15) return OhrtGrouped((long long)number);
-    return [NSString stringWithFormat:@"%.4g", number];
+    // No exponents: one decimal on a large number, up to four on a small
+    // one with the zeros at its end left off.
+    if (fabs(number) >= 100 && fabs(number) < 1e15) {
+        long long tenths = llround(fabs(number) * 10);
+        return [NSString stringWithFormat:@"%@%@.%lld", number < 0 ? @"-" : @"", OhrtGrouped(tenths / 10), tenths % 10];
+    }
+    NSString *text = [NSString stringWithFormat:@"%.4f", number];
+    while ([text hasSuffix:@"0"]) text = [text substringToIndex:text.length - 1];
+    return [text hasSuffix:@"."] ? [text stringByAppendingString:@"0"] : text;
 }
 
 static NSString *OhrtAboutTime(id value) {
@@ -74,6 +82,10 @@ static NSString *OhrtAboutYesNo(id value) {
     return [value isKindOfClass:[NSNumber class]] ? ([value boolValue] ? @"yes" : @"no") : OhrtAboutNumber(value);
 }
 
+static NSString *OhrtAboutBytes(id value) {
+    return [NSString stringWithFormat:@"%.1f GB", [value doubleValue] / 1e9];
+}
+
 static NSString *OhrtAboutOf28(id value) {
     return [OhrtAboutNumber(value) stringByAppendingString:@"/28"];
 }
@@ -81,6 +93,7 @@ static NSString *OhrtAboutOf28(id value) {
 typedef NSString * (*OhrtAboutFormat)(id);
 
 static NSString *const kOhrtAboutBestiesKey = @"ohrt_about_besties";
+static const NSUInteger kOhrtAboutScoresWait = 60;
 
 enum {
     kOhrtAboutBack = 0x11111b,
@@ -139,6 +152,8 @@ static NSString *OhrtAboutFit(NSString *text, NSInteger width) {
 // bottom one, and `under` is a dim line below the rows.
 @property (nonatomic, copy) NSString *title, *note, *foot, *under;
 @property (nonatomic, copy) NSArray<OhrtAboutRow *> *rows;
+// Its values are not here yet: the rows hold their places, empty.
+@property (nonatomic) BOOL loading;
 @end
 
 @implementation OhrtAboutBox
@@ -150,12 +165,22 @@ static const CGFloat kOhrtAboutSide = 5, kOhrtAboutTop = 8;
 @interface OhrtAboutPage : UIView
 @property (nonatomic, copy) NSArray<OhrtAboutBox *> *boxes;
 @property (nonatomic, copy) void (^tapped)(OhrtAboutRow *row);
+// The label of the row whose explanation is open, which is drawn lit.
+@property (nonatomic, copy) NSString *selected;
+- (CGFloat)heightForWidth:(CGFloat)width;
+- (CGRect)areaOfRowLabelled:(NSString *)label;
 @end
+
+static const CFTimeInterval kOhrtAboutFill = 0.8;
 
 @implementation OhrtAboutPage {
     CGFloat _cw, _ch;
     UIFont *_plain, *_bold;
     NSMutableArray<NSArray *> *_hits;
+    BOOL _hitsStale;
+    // When each box with meters began to fill, by its title.
+    NSMutableDictionary<NSString *, NSNumber *> *_began;
+    CADisplayLink *_link;
 }
 
 static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
@@ -172,6 +197,7 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
     _ch = round(cw * 17 / 7 * scale) / scale;
     _plain = OhrtAboutFont(cw, UIFontWeightRegular);
     _bold = OhrtAboutFont(cw, UIFontWeightBold);
+    _hitsStale = YES;
 }
 
 - (NSInteger)linesIn:(OhrtAboutBox *)box {
@@ -194,13 +220,105 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
     return kOhrtAboutTop + row * _ch;
 }
 
+- (BOOL)fills:(OhrtAboutBox *)box {
+    return box.kind == OhrtAboutKindRates || box.kind == OhrtAboutKindRanked;
+}
+
+- (CGRect)areaOfBox:(OhrtAboutBox *)wanted {
+    NSInteger row = 2;
+    for (OhrtAboutBox *box in self.boxes) {
+        NSInteger lines = [self linesIn:box];
+        if (box == wanted) return CGRectMake(0, [self y:row], self.bounds.size.width, (lines + 2) * _ch);
+        row += lines + 2;
+    }
+    return CGRectZero;
+}
+
+// A box with meters fills from empty the first time its values are shown,
+// and again if they were not there at first.
+- (void)setBoxes:(NSArray<OhrtAboutBox *> *)boxes {
+    _boxes = [boxes copy];
+    _hitsStale = YES;
+    if (!_began) _began = [NSMutableDictionary dictionary];
+    BOOL filling = NO;
+    for (OhrtAboutBox *box in _boxes) {
+        if (![self fills:box]) continue;
+        if (box.loading) {
+            [_began removeObjectForKey:box.title];
+        } else if (!_began[box.title]) {
+            _began[box.title] = @(CACurrentMediaTime());
+            filling = YES;
+        }
+    }
+    if (filling) [self startFilling];
+    [self setNeedsDisplay];
+}
+
+- (void)startFilling {
+    if (!self.window || _link) return;
+    _link = [CADisplayLink displayLinkWithTarget:self selector:@selector(fill)];
+    [_link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
+
+- (double)filledOf:(OhrtAboutBox *)box {
+    NSNumber *began = _began[box.title];
+    if (box.loading) return 0;
+    if (!began || !_link) return 1;
+    double along = MIN(1, MAX(0, (CACurrentMediaTime() - began.doubleValue) / kOhrtAboutFill));
+    return 1 - pow(1 - along, 3);
+}
+
+- (void)fill {
+    BOOL more = NO;
+    CFTimeInterval now = CACurrentMediaTime();
+    for (OhrtAboutBox *box in self.boxes) {
+        NSNumber *began = _began[box.title];
+        if (![self fills:box] || box.loading || !began) continue;
+        // One frame past the end, so the last one drawn is the full one.
+        if (now - began.doubleValue > kOhrtAboutFill + 0.1) continue;
+        more = YES;
+        [self setNeedsDisplayInRect:[self areaOfBox:box]];
+    }
+    if (more) return;
+    [_link invalidate];
+    _link = nil;
+    [self setNeedsDisplay];
+}
+
+// Each time the page comes on screen its meters fill again.
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    if (!self.window) {
+        [_link invalidate];
+        _link = nil;
+        return;
+    }
+    for (OhrtAboutBox *box in self.boxes) {
+        if ([self fills:box] && !box.loading) _began[box.title] = @(CACurrentMediaTime());
+    }
+    if (_began.count) [self startFilling];
+    [self setNeedsDisplay];
+}
+
+- (void)setSelected:(NSString *)selected {
+    if (selected == _selected || [selected isEqualToString:_selected]) return;
+    _selected = [selected copy];
+    [self setNeedsDisplay];
+}
+
+- (CGRect)areaOfRowLabelled:(NSString *)label {
+    for (NSArray *hit in _hits) {
+        if ([((OhrtAboutRow *)hit[1]).label isEqualToString:label]) return [hit[0] CGRectValue];
+    }
+    return CGRectZero;
+}
+
 - (void)put:(NSString *)text row:(NSInteger)row column:(NSInteger)column colour:(uint32_t)colour bold:(BOOL)bold {
     if (!text.length) return;
     UIFont *font = bold ? _bold : _plain;
     [text drawAtPoint:CGPointMake([self x:column], [self y:row] + (_ch - font.lineHeight) / 2) withAttributes:@{NSFontAttributeName : font, NSForegroundColorAttributeName : OhrtAboutHex(colour)}];
 }
 
-// Text that ends just before `end`.
 - (void)put:(NSString *)text row:(NSInteger)row end:(NSInteger)end colour:(uint32_t)colour bold:(BOOL)bold {
     [self put:text row:row column:end - (NSInteger)text.length colour:colour bold:bold];
 }
@@ -208,7 +326,7 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
 // A label at `column` and its value ending before `column + width`.
 - (void)pair:(OhrtAboutRow *)item row:(NSInteger)row column:(NSInteger)column width:(NSInteger)width label:(uint32_t)label value:(uint32_t)colour bold:(BOOL)bold {
     NSString *value = OhrtAboutFit([item.value stringByReplacingOccurrencesOfString:@"_" withString:@" "], width - 4);
-    [self put:OhrtAboutFit(item.label, width - (NSInteger)value.length - 1) row:row column:column colour:label bold:NO];
+    [self put:OhrtAboutFit(item.label, width - (NSInteger)value.length - (value.length ? 1 : 0)) row:row column:column colour:label bold:NO];
     [self put:value row:row end:column + width colour:colour bold:bold];
 }
 
@@ -216,7 +334,7 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
 // are drawn as dots here, since the phone's monospaced face borrows its
 // braille from another one of a different width.
 - (void)meter:(double)part row:(NSInteger)row column:(NSInteger)column cells:(NSInteger)cells colours:(const uint32_t *)stops count:(int)count {
-    NSInteger total = cells * 2, lit = MAX(1, (NSInteger)lround(MIN(1, MAX(0, part)) * total));
+    NSInteger total = cells * 2, lit = part > 0 ? MAX(1, (NSInteger)lround(MIN(1, part) * total)) : 0;
     CGContextRef context = UIGraphicsGetCurrentContext();
     CGFloat radius = _cw * 0.15;
     for (NSInteger dot = 0; dot < total; dot++) {
@@ -277,71 +395,77 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
     [self put:box.foot row:last column:footAt colour:kOhrtAboutDim bold:NO];
 }
 
-- (void)hit:(OhrtAboutRow *)item row:(NSInteger)row column:(NSInteger)column width:(NSInteger)width {
-    if (!item.about.length) return;
-    [_hits addObject:@[ [NSValue valueWithCGRect:CGRectMake([self x:column], [self y:row], width * _cw, _ch)], item ]];
-}
-
+// Only the boxes the rectangle touches are drawn, so that one box filling
+// does not redraw the page. Where each row is, for taps, is worked out for
+// the whole page whenever its rows or its width change.
 - (void)drawRect:(CGRect)rect {
     [self measure:self.bounds.size.width];
-    _hits = [NSMutableArray array];
+    BOOL collect = _hitsStale || !_hits;
+    if (collect) _hits = [NSMutableArray array];
+    _hitsStale = NO;
     const NSInteger columns = kOhrtAboutColumns, inner = columns - 4, middle = columns / 2;
-    [self put:@"hidden account data" row:0 column:1 colour:kOhrtAboutWhite bold:YES];
-    [self put:[@"ohrtstagram " stringByAppendingString:OHRT_VERSION] row:0 end:columns - 1 colour:kOhrtAboutDim bold:NO];
+    if (CGRectGetMinY(rect) < [self y:1]) {
+        [self put:@"hidden account data" row:0 column:1 colour:kOhrtAboutWhite bold:YES];
+        [self put:[@"ohrtstagram " stringByAppendingString:OHRT_VERSION] row:0 end:columns - 1 colour:kOhrtAboutDim bold:NO];
+    }
     static const uint32_t rates[] = {0xf05050, 0xff40b6, 0x4897d4, 0x50f095, 0xf0c050};
     static const uint32_t close[] = {0x4897d4, 0x8080ff, 0xff40b6};
     NSInteger row = 2;
     NSUInteger index = 0;
     for (OhrtAboutBox *box in self.boxes) {
         NSInteger lines = [self linesIn:box];
-        [self frame:box index:++index from:row to:row + lines + 1];
-        NSInteger at = row + 1;
+        index++;
+        BOOL seen = CGRectIntersectsRect(rect, CGRectMake(0, [self y:row], self.bounds.size.width, (lines + 2) * _ch));
+        if (!seen && !collect) {
+            row += lines + 2;
+            continue;
+        }
+        if (seen) [self frame:box index:index from:row to:row + lines + 1];
+        double filled = [self filledOf:box];
         for (NSUInteger place = 0; place < box.rows.count; place++) {
             OhrtAboutRow *item = box.rows[place];
+            BOOL grid = box.kind == OhrtAboutKindGrid, second = grid && place % 2;
+            NSInteger line = row + 1 + (grid ? place / 2 : place);
+            CGRect area = CGRectMake([self x:grid && second ? middle : 1], [self y:line], (grid ? middle - 1 : columns - 2) * _cw, _ch);
+            if (collect && item.about.length) [_hits addObject:@[ [NSValue valueWithCGRect:area], item ]];
+            if (!seen) continue;
+            if (self.selected && [item.label isEqualToString:self.selected]) {
+                [OhrtAboutHex(kOhrtAboutOff) setFill];
+                UIRectFill(CGRectInset(area, grid ? _cw * 0.5 : 0, 1));
+            }
             switch (box.kind) {
                 case OhrtAboutKindLine:
-                    [self pair:item row:at column:2 width:inner label:kOhrtAboutText value:kOhrtAboutQuietRed bold:YES];
-                    [self hit:item row:at column:1 width:columns - 2];
-                    at++;
+                    [self pair:item row:line column:2 width:inner label:kOhrtAboutText value:kOhrtAboutQuietRed bold:YES];
                     break;
-                case OhrtAboutKindGrid: {
-                    BOOL second = place % 2;
-                    NSInteger line = at + place / 2;
+                case OhrtAboutKindGrid:
                     [self pair:item row:line column:second ? middle + 1 : 2 width:second ? columns - middle - 3 : middle - 4 label:kOhrtAboutText value:kOhrtAboutWhite bold:YES];
-                    [self hit:item row:line column:second ? middle : 1 width:middle - 1];
                     break;
-                }
                 case OhrtAboutKindRates:
-                    [self put:OhrtAboutFit(item.label, 24) row:at column:2 colour:kOhrtAboutText bold:NO];
-                    [self meter:item.part row:at column:27 cells:20 colours:&rates[place % 5] count:1];
-                    [self put:item.value row:at end:columns - 2 colour:kOhrtAboutWhite bold:YES];
-                    [self hit:item row:at column:1 width:columns - 2];
-                    at++;
+                    [self put:OhrtAboutFit(item.label, 24) row:line column:2 colour:kOhrtAboutText bold:NO];
+                    [self meter:item.part * filled row:line column:27 cells:20 colours:&rates[place % 5] count:1];
+                    [self put:filled >= 1 ? item.value : OhrtAboutRate(@(item.part * filled)) row:line end:columns - 2 colour:kOhrtAboutWhite bold:YES];
                     break;
                 case OhrtAboutKindRanked:
-                    [self put:OhrtGrouped((long long)item.place) row:at end:7 colour:kOhrtAboutDim bold:NO];
-                    [self put:OhrtAboutFit(item.label, 18) row:at column:8 colour:kOhrtAboutName bold:NO];
-                    [self meter:item.part row:at column:27 cells:22 colours:close count:3];
-                    [self put:item.value row:at end:columns - 2 colour:kOhrtAboutWhite bold:YES];
-                    [self hit:item row:at column:1 width:columns - 2];
-                    at++;
+                    if (item.place) [self put:OhrtGrouped((long long)item.place) row:line end:7 colour:kOhrtAboutDim bold:NO];
+                    [self put:OhrtAboutFit(item.label, 18) row:line column:8 colour:kOhrtAboutName bold:NO];
+                    [self meter:item.part * filled row:line column:27 cells:22 colours:close count:3];
+                    if (!box.loading) [self put:filled >= 1 ? item.value : [NSString stringWithFormat:@"%.0f", item.part * filled * 100] row:line end:columns - 2 colour:kOhrtAboutWhite bold:YES];
                     break;
                 case OhrtAboutKindRaw:
-                    [self pair:item row:at column:2 width:inner label:kOhrtAboutDim value:kOhrtAboutText bold:NO];
-                    [self hit:item row:at column:1 width:columns - 2];
-                    at++;
+                    [self pair:item row:line column:2 width:inner label:kOhrtAboutDim value:kOhrtAboutText bold:NO];
                     break;
             }
         }
-        if (box.kind == OhrtAboutKindGrid) {
+        if (seen && box.kind == OhrtAboutKindGrid) {
             UIBezierPath *divide = [UIBezierPath bezierPath];
             [divide moveToPoint:CGPointMake([self x:middle] - _cw / 2, [self y:row + 1] + 3)];
             [divide addLineToPoint:CGPointMake([self x:middle] - _cw / 2, [self y:row + lines + 1] - 3)];
             [OhrtAboutHex(kOhrtAboutDivide) setStroke];
             [divide stroke];
         } else if (box.under.length) {
-            [self put:OhrtAboutFit(box.under, inner) row:at column:2 colour:kOhrtAboutDim bold:NO];
-            if (box.rows.count) [self hit:box.rows[0] row:at column:1 width:columns - 2];
+            NSInteger line = row + 1 + (NSInteger)box.rows.count;
+            if (seen) [self put:OhrtAboutFit(box.under, inner) row:line column:2 colour:kOhrtAboutDim bold:NO];
+            if (collect && box.rows.count && box.rows[0].about.length) [_hits addObject:@[ [NSValue valueWithCGRect:CGRectMake([self x:1], [self y:line], (columns - 2) * _cw, _ch)], box.rows[0] ]];
         }
         row += lines + 2;
     }
@@ -354,6 +478,7 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
         if (self.tapped) self.tapped(hit[1]);
         return;
     }
+    if (self.tapped) self.tapped(nil);
 }
 
 @end
@@ -363,7 +488,10 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
 @property (nonatomic, strong) OhrtAboutPage *page;
 @property (nonatomic, strong) UIImageView *backdrop;
 @property (nonatomic, strong) UIView *panel;
+// The predictor's answer, nil while it is being asked.
 @property (nonatomic, copy) NSString *nextOpen;
+@property (nonatomic) BOOL nextOpenFailed;
+@property (nonatomic) NSUInteger asks;
 @property (nonatomic) CGFloat bottomRoom;
 @property (nonatomic) BOOL waiting;
 @property (nonatomic) NSUInteger waited;
@@ -417,7 +545,24 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
         [weakSelf explain:row];
     };
     [self.scroll addSubview:self.page];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(cameBack) name:UIApplicationWillEnterForegroundNotification object:nil];
     [self refresh];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+// The app was away: the prediction and the rest are old.
+- (void)cameBack {
+    if (self.view.window) [self refresh];
+}
+
+// The tab was pressed while this was open: up to the top, or if it is
+// there already, everything is read again.
+- (void)toTop {
+    if (self.scroll.contentOffset.y > 1) [self.scroll setContentOffset:CGPointZero animated:YES];
+    else [self refresh];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -426,7 +571,11 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
     CGFloat top = [self topRoom];
     CGRect frame = CGRectMake(0, top, size.width, size.height - top);
     if (!CGRectEqualToRect(self.scroll.frame, frame)) self.scroll.frame = frame;
-    self.scroll.contentInset = UIEdgeInsetsMake(0, 0, self.bottomRoom, 0);
+    // With an explanation open, the page can still be scrolled clear of it.
+    CGFloat card = self.panel ? self.panel.bounds.size.height + 16 : 0;
+    UIEdgeInsets inset = UIEdgeInsetsMake(0, 0, self.bottomRoom + card, 0);
+    if (!UIEdgeInsetsEqualToEdgeInsets(self.scroll.contentInset, inset)) self.scroll.contentInset = inset;
+    self.scroll.verticalScrollIndicatorInsets = UIEdgeInsetsMake(0, 0, self.bottomRoom, 0);
     CGRect page = CGRectMake(0, 0, size.width, [self.page heightForWidth:size.width]);
     if (!CGRectEqualToRect(self.page.frame, page)) self.page.frame = page;
     self.scroll.contentSize = page.size;
@@ -437,15 +586,14 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
             self.backdrop.layer.mask.frame = self.backdrop.bounds;
         }
     }
-    self.panel.frame = self.view.bounds;
 }
 
 // Instagram's tab bar controller does not pass "will appear" on to a screen
 // laid over it, so the screen fills itself as it loads.
 - (void)refresh {
     OhrtTry(@"about", ^{
-        [self build];
         [self askNextOpen];
+        [self build];
     });
     OhrtLog(@"about: %lu boxes shown", (unsigned long)self.page.boxes.count);
 }
@@ -574,6 +722,13 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
     [rows addObject:row];
 }
 
+static NSString *OhrtAboutBestieMeaning(NSUInteger scored) {
+    return [NSString stringWithFormat:@"The score Meta's servers give this account for how close you are, out of 100. It is one of %@ accounts scored for you, and Insta\u2060gram uses the scores to "
+                                      @"order its suggestions, such as who to add to close friends and who to message. Shown are the first three places, then eight more spread down to the last. "
+                                      @"How the score is worked out stays on Meta's servers.\n\nInsta\u2060gram's name for it: coefficient_besties_list_ranking",
+                                      OhrtGrouped((long long)scored)];
+}
+
 - (NSArray<OhrtAboutRow *> *)besties:(NSUInteger *)total {
     id service = OhrtCall(OhrtCurrentSession(), @"userBootstrapService");
     id bootstrap = OhrtAboutIvar(service, "_bootstrap");
@@ -603,10 +758,7 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
     NSArray *ordered = [scores keysSortedByValueUsingComparator:^NSComparisonResult(id one, id other) {
         return [other compare:one];
     }];
-    NSString *about = [NSString stringWithFormat:@"The score Meta's servers give this account for how close you are, out of 100. It is one of %@ accounts scored for you, and Insta\u2060gram uses the scores to "
-                                                 @"order its suggestions, such as who to add to close friends and who to message. How the score is worked out stays on Meta's servers.\n\nInsta\u2060gram's name for "
-                                                 @"it: coefficient_besties_list_ranking",
-                                                 OhrtGrouped((long long)scores.count)];
+    NSString *about = OhrtAboutBestieMeaning(scores.count);
     // The first three, then eight more places spread down to the last, each
     // the same number of times further down than the one before. The top of
     // the list is too close together to tell apart as bars, and how long the
@@ -645,11 +797,13 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
     NSDictionary *f = OhrtAboutFeatures(&when);
     NSMutableArray<OhrtAboutBox *> *boxes = [NSMutableArray array];
 
-    OhrtAboutBox *next = OhrtAboutBoxed(OhrtAboutKindLine, @"next open", @"casper, a model on this phone", @[ OhrtAboutPlain(@"instagram expects you to reopen the app in", self.nextOpen ?: @"asking",
-                              @"Insta⁠gram's guess at how long until you next open the app. The model runs on your phone and looks at how often you opened the app over the last hour up to the "
-                              @"last week, how long you stayed, the time of day, your unread messages and where you were when you last left. Insta⁠gram uses the guess to decide when to "
-                              @"fetch new posts in the background.\n\nInsta⁠gram's name for it: IGCasper, minutes_to_next_target_event") ]);
+    NSString *asked = self.nextOpen ? @"instagram expects you to reopen the app in" : self.nextOpenFailed ? @"casper gave no estimate on this phone" : @"asking casper when you'll open the app next";
+    OhrtAboutBox *next = OhrtAboutBoxed(OhrtAboutKindLine, @"next open", @"casper, a model on this phone", @[ OhrtAboutPlain(asked, self.nextOpen ?: @"",
+                              @"Insta\u2060gram's guess at how long until you next open the app. The model runs on your phone and looks at how often you opened the app over the last hour up to the "
+                              @"last week, how long you stayed, the time of day, your unread messages and which screen you last left from. Insta\u2060gram uses the guess to decide when to "
+                              @"fetch new posts in the background.\n\nInsta\u2060gram's name for it: IGCasper, minutes_to_next_target_event") ]);
     next.under = @"worked out from when and how often you open it";
+    next.foot = @"tap a row for what it means";
     [boxes addObject:next];
 
     NSMutableArray<OhrtAboutRow *> *rows = [NSMutableArray array];
@@ -689,59 +843,56 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
     OhrtAboutAdd(rows, f, @"videos finished", @"viewer_d28_video_complete", NULL, @"Videos you watched all the way through in the last 28 days.");
     OhrtAboutAdd(rows, f, @"days on explore", @"user_explore_l28", OhrtAboutOf28, @"On how many of the last 28 days you opened Explore.");
     OhrtAboutAdd(rows, f, @"stories offered", @"user_story_inventory_28d", NULL, @"How many stories there were for you to watch in the last 28 days.");
-    OhrtAboutAdd(rows, f, @"days active", @"user_l28_ig_classic_count", OhrtAboutOf28, @"On how many of the last 28 days you used Insta⁠gram.");
+    OhrtAboutAdd(rows, f, @"days active", @"user_l28_ig_classic_count", OhrtAboutOf28, @"On how many of the last 28 days you used Insta\u2060gram.");
+    OhrtAboutAdd(rows, f, @"days messaging", @"user_sender_l28", OhrtAboutOf28, @"On how many of the last 28 days you sent at least one message.");
     if (rows.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindGrid, @"last 28 days", @"as instagram counted", rows)];
 
     rows = [NSMutableArray array];
     OhrtAboutAdd(rows, f, @"posts you like", @"user_feed_connected_like_rate_d28", OhrtAboutRate, @"Of the posts shown to you from people you follow, the share you liked, over 28 days.");
-    OhrtAboutAdd(rows, f, @"profile taps", @"user_feed_connected_profile_tap_rate_d28", OhrtAboutRate, @"The share of those posts where you tapped through to the profile.");
-    OhrtAboutAdd(rows, f, @"posts you share", @"user_feed_connected_reshare_rate_d28", OhrtAboutRate, @"The share of those posts you sent to someone.");
+    OhrtAboutAdd(rows, f, @"profile taps", @"user_feed_connected_profile_tap_rate_d28", OhrtAboutRate, @"Of the posts shown to you from people you follow, the share where you tapped through to the profile, over 28 days.");
+    OhrtAboutAdd(rows, f, @"posts you share", @"user_feed_connected_reshare_rate_d28", OhrtAboutRate, @"Of the posts shown to you from people you follow, the share you sent to someone, over 28 days.");
     OhrtAboutAdd(rows, f, @"suggested reels liked", @"user_feed_ifr_reels_like_rate_28d", OhrtAboutRate, @"Of the reels Insta⁠gram suggested in your feed, the share you liked.");
     OhrtAboutAdd(rows, f, @"follows that follow back", @"user_reciprocal_follow_rate", OhrtAboutRate, @"Of the accounts you follow, the share that follow you back.");
     if (rows.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRates, @"rates", @"of what you were shown", rows)];
 
     // Instagram fills its list of scores a couple of seconds after it
-    // starts. Until then the rows shown last time stand in, kept on the phone.
+    // starts. The box is there from the first at its full height: with the
+    // rows shown last time, kept on the phone, or failing that with empty
+    // ones that fill when the list comes.
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *viewer = [OhrtCall(OhrtCall(OhrtCurrentSession(), @"user"), @"pk") description] ?: @"";
     NSUInteger scored = 0;
     NSArray<OhrtAboutRow *> *closest = [self besties:&scored];
+    OhrtAboutBox *besties = OhrtAboutBoxed(OhrtAboutKindRanked, @"bestie_coefficient", nil, closest);
     if (closest.count) {
         NSMutableArray *kept = [NSMutableArray array];
-        for (OhrtAboutRow *row in closest) [kept addObject:@{@"label" : row.label, @"value" : row.value, @"about" : row.about, @"part" : @(row.part), @"place" : @(row.place)}];
-        [defaults setObject:@{@"rows" : kept, @"scored" : @(scored), @"viewer" : [OhrtCall(OhrtCall(OhrtCurrentSession(), @"user"), @"pk") description] ?: @""} forKey:kOhrtAboutBestiesKey];
+        for (OhrtAboutRow *row in closest) [kept addObject:@{@"label" : row.label, @"value" : row.value, @"part" : @(row.part), @"place" : @(row.place)}];
+        NSDictionary *keep = @{@"rows" : kept, @"scored" : @(scored), @"viewer" : viewer};
+        if (![keep isEqual:[defaults dictionaryForKey:kOhrtAboutBestiesKey]]) [defaults setObject:keep forKey:kOhrtAboutBestiesKey];
+        if (self.waited) OhrtLog(@"about: the scores came %lu seconds after the screen opened", (unsigned long)self.waited);
+        self.waited = 0;
     } else {
         NSDictionary *kept = [defaults dictionaryForKey:kOhrtAboutBestiesKey];
         NSMutableArray<OhrtAboutRow *> *last = [NSMutableArray array];
-        if ([kept[@"viewer"] isEqual:[OhrtCall(OhrtCall(OhrtCurrentSession(), @"user"), @"pk") description] ?: @""]) {
+        if ([kept[@"viewer"] isEqual:viewer]) {
+            scored = [kept[@"scored"] unsignedIntegerValue];
             for (NSDictionary *one in [kept[@"rows"] isKindOfClass:[NSArray class]] ? kept[@"rows"] : @[]) {
                 if (![one isKindOfClass:[NSDictionary class]] || ![one[@"label"] isKindOfClass:[NSString class]] || ![one[@"value"] isKindOfClass:[NSString class]]) continue;
-                OhrtAboutRow *row = OhrtAboutPlain(one[@"label"], one[@"value"], [one[@"about"] isKindOfClass:[NSString class]] ? one[@"about"] : @"");
+                OhrtAboutRow *row = OhrtAboutPlain(one[@"label"], one[@"value"], OhrtAboutBestieMeaning(scored));
                 row.part = [one[@"part"] doubleValue];
                 row.place = [one[@"place"] unsignedIntegerValue];
                 [last addObject:row];
             }
         }
-        if (last.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRanked, @"bestie_coefficient", [OhrtGrouped([kept[@"scored"] longLongValue]) stringByAppendingString:@" accounts scored"], last)];
+        if (!last.count) {
+            besties.loading = YES;
+            for (int place = 0; place < 11; place++) [last addObject:OhrtAboutPlain(@"", @"", nil)];
+        }
+        besties.rows = last;
+        [self waitForScores];
     }
-    if (closest.count) {
-        [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRanked, @"bestie_coefficient", [OhrtGrouped((long long)scored) stringByAppendingString:@" accounts scored"], closest)];
-        if (self.waited) OhrtLog(@"about: the scores came %lu seconds after the screen opened", (unsigned long)self.waited);
-        self.waited = 0;
-    } else if (!self.waiting && self.waited < 60) {
-        // Instagram fills its list of scores some time after it starts, so
-        // the screen looks again each second until the list is there.
-        self.waiting = YES;
-        __weak OhrtAboutViewController *weakSelf = self;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            OhrtAboutViewController *strongSelf = weakSelf;
-            if (!strongSelf) return;
-            strongSelf.waiting = NO;
-            strongSelf.waited++;
-            OhrtTry(@"about", ^{
-                [strongSelf build];
-            });
-        });
-    }
+    besties.note = besties.loading ? (self.waited < kOhrtAboutScoresWait ? @"scores loading" : @"no scores on this phone yet") : [OhrtGrouped((long long)scored) stringByAppendingString:@" accounts scored"];
+    if (f || !besties.loading) [boxes addObject:besties];
 
     // Everything else it filled, under its own names.
     NSMutableSet<NSString *> *shown = [NSMutableSet setWithArray:@[
@@ -749,12 +900,12 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
         @"user_timespent_28d_sec", @"user_feed_timespent_1d", @"user_stories_timespent_1d", @"core_foreground_session_count_l7", @"user_total_sends_28d", @"user_total_message_reads_28d",
         @"viewer_d28_direct_reshare_send", @"viewer_d28_instagram_clips_organic_impression", @"viewer_d28_instagram_clips_swipe_forward", @"viewer_d28_video_complete", @"user_explore_l28",
         @"user_story_inventory_28d", @"user_feed_connected_like_rate_d28", @"user_feed_connected_profile_tap_rate_d28", @"user_feed_connected_reshare_rate_d28", @"user_feed_ifr_reels_like_rate_28d",
-        @"user_reciprocal_follow_rate"
+        @"user_reciprocal_follow_rate", @"user_sender_l28"
     ]];
     rows = [NSMutableArray array];
     for (NSString *key in [[f allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
         if (![key isKindOfClass:[NSString class]] || [shown containsObject:key] || !OhrtAboutFilled(f[key])) continue;
-        [rows addObject:OhrtAboutPlain(key, OhrtAboutNumber(f[key]), OhrtAboutMeaning(key))];
+        [rows addObject:OhrtAboutPlain(key, [key hasPrefix:@"max_ram"] ? OhrtAboutBytes(f[key]) : OhrtAboutNumber(f[key]), OhrtAboutMeaning(key))];
     }
     if (rows.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRaw, @"raw", [NSString stringWithFormat:@"%lu values, meta's names", (unsigned long)rows.count], rows)];
 
@@ -762,49 +913,79 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
         OhrtAboutBox *none = OhrtAboutBoxed(OhrtAboutKindLine, @"profile", @"not here yet", @[ OhrtAboutPlain(@"comes with the home feed", @"waiting", @"Insta⁠gram has not sent it to this phone yet. Open the feed, then come back.") ]);
         [boxes addObject:none];
     }
-    boxes.lastObject.foot = @"tap a row: what it means";
     self.page.boxes = boxes;
-    [self.page setNeedsDisplay];
     [self.view setNeedsLayout];
 }
 
-// The model's answer comes as a whole number and a fraction of minutes; the
-// two agreed (161 and 161.18) when this was first asked.
+// Looks once a second for the list of scores, and builds the page again
+// only when it has come or the wait is given up.
+- (void)waitForScores {
+    if (self.waiting || self.waited >= kOhrtAboutScoresWait) return;
+    self.waiting = YES;
+    __weak OhrtAboutViewController *weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        OhrtAboutViewController *strongSelf = weakSelf;
+        if (!strongSelf) return;
+        strongSelf.waiting = NO;
+        strongSelf.waited++;
+        OhrtTry(@"about", ^{
+            if ([strongSelf besties:NULL].count || strongSelf.waited >= kOhrtAboutScoresWait) [strongSelf build];
+            else [strongSelf waitForScores];
+        });
+    });
+}
+
+// The model answers with a whole number of minutes and the same as a
+// fraction. If it has not answered in a few seconds, the row says so.
 - (void)askNextOpen {
     id casper = OhrtCall(OhrtCurrentSession(), @"casper");
     SEL estimate = NSSelectorFromString(@"estimateMinutesToNextTargetEventAfterBackground:completionQueue:");
     if (![casper respondsToSelector:estimate]) {
-        self.nextOpen = @"not known";
+        self.nextOpen = nil;
+        self.nextOpenFailed = YES;
         return;
     }
+    NSUInteger ask = ++self.asks;
     __weak OhrtAboutViewController *weakSelf = self;
     void (^answer)(long long, float) = ^(long long whole, float minutes) {
         OhrtAboutViewController *strongSelf = weakSelf;
-        if (!strongSelf) return;
+        if (!strongSelf || !(minutes >= 0)) return;
         long long rounded = llround(minutes);
         strongSelf.nextOpen = rounded >= 60 ? [NSString stringWithFormat:@"%lldh %lldm", rounded / 60, rounded % 60] : [NSString stringWithFormat:@"%lldm", rounded];
+        strongSelf.nextOpenFailed = NO;
         OhrtTry(@"about", ^{
             [strongSelf build];
         });
     };
     ((void (*)(id, SEL, id, id))objc_msgSend)(casper, estimate, (id)answer, dispatch_get_main_queue());
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        OhrtAboutViewController *strongSelf = weakSelf;
+        if (!strongSelf || strongSelf.asks != ask || strongSelf.nextOpen) return;
+        strongSelf.nextOpenFailed = YES;
+        OhrtTry(@"about", ^{
+            [strongSelf build];
+        });
+    });
 }
 
 - (void)closePanel {
     [self.panel removeFromSuperview];
     self.panel = nil;
+    self.page.selected = nil;
+    [self.view setNeedsLayout];
 }
 
 // What a row means, in a box of the same kind at the foot of the screen.
+// The page under it still scrolls, another row swaps it, and a tap on it,
+// on its own row or on nothing closes it.
 - (void)explain:(OhrtAboutRow *)row {
+    BOOL same = !row || [row.label isEqualToString:self.page.selected];
     [self closePanel];
-    UIControl *shade = [[UIControl alloc] initWithFrame:self.view.bounds];
-    shade.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
-    [shade addTarget:self action:@selector(closePanel) forControlEvents:UIControlEventTouchUpInside];
+    if (same) return;
 
     UILabel *head = [UILabel new];
-    head.text = [NSString stringWithFormat:@"%@  %@", row.label, row.value];
-    head.font = [UIFont monospacedSystemFontOfSize:13 weight:UIFontWeightBold];
+    head.text = row.value.length ? [NSString stringWithFormat:@"%@\n%@", row.label, row.value] : row.label;
+    head.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightBold];
     head.textColor = OhrtAboutHex(kOhrtAboutWhite);
     head.numberOfLines = 0;
     head.lineBreakMode = NSLineBreakByCharWrapping;
@@ -822,7 +1003,7 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
     UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[ head, body, foot ]];
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = 10;
-    stack.layoutMargins = UIEdgeInsetsMake(14, 14, 12, 14);
+    stack.layoutMargins = UIEdgeInsetsMake(12, 12, 10, 12);
     stack.layoutMarginsRelativeArrangement = YES;
     stack.userInteractionEnabled = NO;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -831,21 +1012,27 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
     card.layer.borderColor = OhrtAboutHex(kOhrtAboutBorder).CGColor;
     card.layer.borderWidth = 1;
     card.layer.cornerRadius = 4;
-    card.userInteractionEnabled = NO;
     card.translatesAutoresizingMaskIntoConstraints = NO;
+    [card addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(closePanel)]];
     [card addSubview:stack];
-    [shade addSubview:card];
+    [self.view addSubview:card];
+    // The box borders sit half a cell in from the side.
+    CGFloat side = kOhrtAboutSide + (self.view.bounds.size.width - 2 * kOhrtAboutSide) / kOhrtAboutColumns / 2;
     [NSLayoutConstraint activateConstraints:@[
         [stack.topAnchor constraintEqualToAnchor:card.topAnchor],
         [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor],
         [stack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
         [stack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
-        [card.leadingAnchor constraintEqualToAnchor:shade.leadingAnchor constant:8],
-        [card.trailingAnchor constraintEqualToAnchor:shade.trailingAnchor constant:-8],
-        [card.bottomAnchor constraintEqualToAnchor:shade.bottomAnchor constant:-(self.bottomRoom + 10)],
+        [card.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:side],
+        [card.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-side],
+        [card.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-(self.bottomRoom + 8)],
     ]];
-    [self.view addSubview:shade];
-    self.panel = shade;
+    self.panel = card;
+    self.page.selected = row.label;
+    [self.view layoutIfNeeded];
+    // The row stays in sight above the box.
+    CGRect area = [self.page areaOfRowLabelled:row.label];
+    if (!CGRectIsEmpty(area)) [self.scroll scrollRectToVisible:CGRectInset([self.page convertRect:area toView:self.scroll], 0, -8) animated:YES];
 }
 
 @end
@@ -854,4 +1041,14 @@ UIViewController *OhrtAboutScreen(CGFloat bottomRoom) {
     OhrtAboutViewController *screen = [OhrtAboutViewController new];
     screen.bottomRoom = bottomRoom;
     return screen;
+}
+
+void OhrtAboutShown(UIViewController *screen, CGFloat bottomRoom) {
+    if (![screen isKindOfClass:[OhrtAboutViewController class]]) return;
+    ((OhrtAboutViewController *)screen).bottomRoom = bottomRoom;
+    [(OhrtAboutViewController *)screen refresh];
+}
+
+void OhrtAboutToTop(UIViewController *screen) {
+    if ([screen isKindOfClass:[OhrtAboutViewController class]]) [(OhrtAboutViewController *)screen toTop];
 }
