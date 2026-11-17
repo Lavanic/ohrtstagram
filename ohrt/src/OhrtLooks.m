@@ -80,6 +80,8 @@ static NSMutableDictionary<NSString *, NSMutableDictionary *> *OhrtLooks(void) {
             OhrtLooksSave();
         }];
     });
+    // Another account: what the last one has unsaved is written first.
+    OhrtLooksSave();
     gOhrtLooksAccount = [account copy];
     gOhrtLooks = [NSMutableDictionary dictionary];
     gOhrtLooksBefore = [NSMutableDictionary dictionary];

@@ -79,10 +79,14 @@ static NSString *OhrtNotesPath(NSString *account) {
     return [OhrtActivityFolder() stringByAppendingPathComponent:[NSString stringWithFormat:@"activity-%@.plist", account]];
 }
 
+static void OhrtNotesSave(void);
+
 static NSMutableDictionary<NSString *, NSMutableDictionary *> *OhrtNotes(void) {
     NSString *account = OhrtActivityAccount();
     if (!account.length) return nil;
     if (gOhrtNotes && [gOhrtNotesAccount isEqualToString:account]) return gOhrtNotes;
+    // Another account: what the last one has unsaved is written first.
+    OhrtNotesSave();
     gOhrtNotesAccount = [account copy];
     gOhrtNotes = [NSMutableDictionary dictionary];
     NSDictionary *kept = [NSDictionary dictionaryWithContentsOfFile:OhrtNotesPath(account)];
