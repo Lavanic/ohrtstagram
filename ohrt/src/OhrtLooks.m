@@ -108,7 +108,7 @@ static void OhrtLooksSave(void) {
     if (!data) return;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         [[NSFileManager defaultManager] createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
-        if (![data writeToFile:path atomically:YES]) OhrtLog(@"looks: the notes could not be written");
+        if (![data writeToFile:path atomically:YES]) OhrtLog(@"looks: the notes couldn't be written");
     });
 }
 

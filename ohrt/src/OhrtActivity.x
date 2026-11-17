@@ -113,7 +113,7 @@ static void OhrtNotesSave(void) {
     if (!data) return;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         [[NSFileManager defaultManager] createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
-        if (![data writeToFile:path atomically:YES]) OhrtLog(@"activity: the notes could not be written");
+        if (![data writeToFile:path atomically:YES]) OhrtLog(@"activity: the notes couldn't be written");
     });
 }
 
@@ -257,7 +257,7 @@ static void OhrtNoteMessagesNow(NSString *pk, NSString *viewer, NSArray<NSNumber
     // Another account's conversations, if the app has them loaded as well.
     if (viewer.length && ![viewer isEqualToString:gOhrtNotesAccount]) {
         static BOOL said;
-        if (!said) OhrtLog(@"activity: messages in a conversation that is not this account's are left out");
+        if (!said) OhrtLog(@"activity: messages in a conversation that isn't this account's are left out");
         said = YES;
         return;
     }

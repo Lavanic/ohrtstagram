@@ -49,7 +49,7 @@ static UIImage *OhrtWordmarkSource(void) {
     dispatch_once(&once, ^{
         NSString *path = [[NSBundle mainBundle] pathForResource:@"OhrtWordmark" ofType:@"png"];
         if (path) image = [UIImage imageWithContentsOfFile:path];
-        if (!image) OhrtLog(@"brand: the wordmark's picture is not in the app");
+        if (!image) OhrtLog(@"brand: the wordmark's picture isn't in the app");
     });
     return image;
 }
@@ -61,7 +61,7 @@ static UIImage *OhrtGlyphSource(void) {
     dispatch_once(&once, ^{
         NSString *path = [[NSBundle mainBundle] pathForResource:@"ohrt-splash@3x" ofType:@"png"];
         if (path) image = [UIImage imageWithContentsOfFile:path];
-        if (!image) OhrtLog(@"brand: the mark's picture is not in the app");
+        if (!image) OhrtLog(@"brand: the mark's picture isn't in the app");
     });
     return image;
 }
@@ -220,7 +220,7 @@ static void OhrtPutWordmark(UIView *header) {
         // The button did not keep what it was given. Asking again from
         // every layout would never end.
         gaveUp = YES;
-        OhrtLog(@"brand: the header's button did not keep the wordmark, so theirs stays");
+        OhrtLog(@"brand: the header's button didn't keep the wordmark, so theirs stays");
         return;
     }
     [button sizeToFit];
@@ -297,7 +297,7 @@ static void OhrtForgetLaunchPictures(void) {
     NSFileManager *files = [NSFileManager defaultManager];
     BOOL had = [files fileExistsAtPath:kept];
     BOOL gone = !had || [files removeItemAtPath:kept error:nil];
-    OhrtLog(@"brand: iOS's pictures of the launch screen %@", !had ? @"were not there" : gone ? @"were thrown away" : @"could not be thrown away");
+    OhrtLog(@"brand: iOS's pictures of the launch screen %@", !had ? @"weren't there" : gone ? @"were thrown away" : @"couldn't be thrown away");
     if (gone) [defaults setObject:OHRT_BUILD forKey:kOhrtLaunchBuildKey];
 }
 

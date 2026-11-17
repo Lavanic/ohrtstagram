@@ -81,7 +81,7 @@ BOOL OhrtSafeLaunch(void) {
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         [defaults setInteger:gOhrtGuard.stored forKey:kOhrtUnfinishedKey];
         [defaults synchronize];
-        if (gOhrtGuard.safe) OhrtLog(@"guard: %ld starts in a row did not settle; this one runs with every switch off", gOhrtGuard.before);
+        if (gOhrtGuard.safe) OhrtLog(@"guard: %ld starts in a row didn't settle; this one runs with every switch off", gOhrtGuard.before);
         if (gOhrtForced) OhrtLog(@"guard: started with every switch off, as set in the Settings app");
     }
     return gOhrtGuard.safe || gOhrtForced;
@@ -134,7 +134,7 @@ BOOL OhrtTry(NSString *feature, void (NS_NOESCAPE ^piece)(void)) {
         piece();
         return YES;
     } @catch (NSException *exception) {
-        OhrtLog(@"%@ threw %@ (%@); it is off until the app restarts", feature, exception.name, exception.reason);
+        OhrtLog(@"%@ threw %@ (%@); it's off until the app restarts", feature, exception.name, exception.reason);
         @synchronized(broken) {
             [broken addObject:feature];
         }

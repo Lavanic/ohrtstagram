@@ -55,7 +55,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
                 OhrtExportImport();
             }],
         ], @"What an account is comes from the app as its profile opens. When you followed each other and how much you have liked and written "
-           @"comes from your Insta\u2060gram export, which holds what the app does not, and from what you do here after it was made. "
+           @"comes from your Insta\u2060gram export, which holds what the app doesn't, and from what you do here after it was made. "
            @"Stories watched are counted here only, since the export lists too few of them. "
            @"Every count is of what you did. All of it stays on this phone."),
         OhrtSection(@"Look", @[
@@ -84,7 +84,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
                 OhrtSwitch(@"Hide ads", @"Removes ads from the feed, stories and search", @"hide_ads"),
                 OhrtSwitch(@"Hide Meta AI", @"Hides the Meta AI buttons and suggestions", @"hide_meta_ai"),
                 OhrtSwitch(@"Copy description", @"Hold a caption or bio to copy it", @"copy_description"),
-                OhrtSwitch(@"Do not save recent searches", @"Search bars stop remembering what you looked for", @"no_recent_searches"),
+                OhrtSwitch(@"Don't save recent searches", @"Search bars stop remembering what you looked for", @"no_recent_searches"),
                 OhrtSwitch(@"Detailed color picker", @"Hold the eyedropper in the story editor for any color", @"detailed_color_picker"),
                 OhrtRestartSwitch(@"Liquid glass buttons", @"Insta\u2060gram's experimental glass buttons", @"liquid_glass_buttons"),
                 OhrtRestartSwitch(@"Liquid glass surfaces", @"The same for menus and other surfaces", @"liquid_glass_surfaces"),
@@ -115,7 +115,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         OhrtPage(@"Reels", @"film.stack", @[
             OhrtSection(@"Limits", @[
                 OhrtRestartSwitch(@"Hide reels tab", @"Takes Reels out of the tab bar", @"hide_reels_tab"),
-                OhrtRestartSwitch(@"Disable scrolling reels", @"A reel someone sent you plays; the next one does not follow", @"disable_scrolling_reels"),
+                OhrtRestartSwitch(@"Disable scrolling reels", @"A reel someone sent you plays; the next one doesn't follow", @"disable_scrolling_reels"),
                 OhrtSwitch(@"Prevent doom scrolling", @"Loads only a few reels at a time and blocks refreshing", @"prevent_doom_scrolling"),
                 [SCISetting stepperCellWithTitle:@"Doom scrolling limit" subtitle:@"Loads %@ %@" defaultsKey:@"doom_scrolling_reel_count"
                                              min:1 max:100 step:1 label:@"reels" singularLabel:@"reel"],
@@ -146,8 +146,8 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         OhrtPage(@"Stories and messages", @"rectangle.portrait.on.rectangle.portrait.angled", @[
             OhrtSection(@"What you send back", @[
                 OhrtSwitch(@"Mark messages seen by hand", @"Adds a button to chats; nothing is marked seen until you press it", @"remove_lastseen"),
-                OhrtSwitch(@"Disable typing status", @"Others do not see when you are typing", @"disable_typing_status"),
-                OhrtSwitch(@"Disable story seen receipt", @"Others do not see that you viewed their story", @"no_seen_receipt"),
+                OhrtSwitch(@"Disable typing status", @"Others don't see when you're typing", @"disable_typing_status"),
+                OhrtSwitch(@"Disable story seen receipt", @"Others don't see that you viewed their story", @"no_seen_receipt"),
             ], nil),
             OhrtSection(nil, @[
                 OhrtRestartSwitch(@"Disable instants creation", @"Hides the ways to make and send instants", @"disable_instants_creation"),
@@ -199,7 +199,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
         [SCISetting buttonCellWithTitle:@"Copy" subtitle:@"" icon:nil action:^{
             [UIPasteboard generalPasteboard].string = OhrtSelfCheck();
         }],
-    ], @"What each ohrtstagram feature needs from Insta\u2060gram, looked up in the app that is running.")];
+    ], @"What each ohrtstagram feature needs from Insta\u2060gram, looked up in the app that's running.")];
     [sections addObject:OhrtSection(nil, @[ OhrtPage(@"Debug", @"ladybug", debug) ], nil)];
 
     [sections addObject:OhrtSection(@"About", @[

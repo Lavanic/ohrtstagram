@@ -376,14 +376,14 @@ static NSString *OhrtSessionAccount(id session) {
 - (void)start {
     if (self.state != OhrtCheckIdle) return;
     if (![self load]) {
-        self.note = @"Could not tell which account is signed in, so nothing was started.";
+        self.note = @"Couldn't tell which account is signed in, so nothing was started.";
         [self changed];
         return;
     }
     if ([self availableAt]) return;
     NSString *missing = OhrtMissing(@"followback");
     if (missing) {
-        [self stopWithNote:[NSString stringWithFormat:@"This Insta\u2060gram version does not have what the check was written for (%@).", missing]];
+        [self stopWithNote:[NSString stringWithFormat:@"This Insta\u2060gram version doesn't have what the check was written for (%@).", missing]];
         return;
     }
     self.followers = nil;
@@ -399,7 +399,7 @@ static NSString *OhrtSessionAccount(id session) {
             [self readList:@"following" then:^(NSDictionary *following) {
                 if (!OhrtTry(@"follow back", ^{
                         [self finishWithFollowing:following];
-                    })) [self stopWithNote:@"The check could not finish on this Insta\u2060gram version."];
+                    })) [self stopWithNote:@"The check couldn't finish on this Insta\u2060gram version."];
             }];
         });
     }];
@@ -442,7 +442,7 @@ static NSString *OhrtSessionAccount(id session) {
         started = [scan startWithSession:session path:path identifier:identifier];
     });
     if (!started) {
-        [self stopWithNote:@"This Insta\u2060gram version does not have the list reader this check was written for."];
+        [self stopWithNote:@"This Insta\u2060gram version doesn't have the list reader this check was written for."];
         return;
     }
     [self changed];
@@ -458,7 +458,7 @@ static NSString *OhrtSessionAccount(id session) {
     [defaults setInteger:failures forKey:OhrtKey(@"failures", self.account)];
     [defaults setDouble:[NSDate date].timeIntervalSince1970 + hours * 3600 forKey:OhrtKey(@"cooldown_until", self.account)];
     OhrtLog(@"follow back: refused, next check in %.0f hours", hours);
-    [self stopWithNote:[NSString stringWithFormat:@"Insta\u2060gram stopped answering part way through. That is usually its rate limit, so the next check waits %.0f hours.", hours]];
+    [self stopWithNote:[NSString stringWithFormat:@"Insta\u2060gram stopped answering part way through. That's usually its rate limit, so the next check waits %.0f hours.", hours]];
 }
 
 static long OhrtCount(id boxed) {
@@ -725,7 +725,7 @@ static NSInteger OhrtFollowStatus(id user) {
         [self.pending removeObject:account];
         [self.controllers removeObjectForKey:account];
         BOOL moved = OhrtFollowStatus(user) != before;
-        OhrtLog(@"unfollow: follow status %@", moved ? @"moved" : @"did not move");
+        OhrtLog(@"unfollow: follow status %@", moved ? @"moved" : @"didn't move");
         if (moved) [[OhrtFollowBack shared] remove:account];
         else [self couldNotUnfollow:account];
         [self.tableView reloadData];
@@ -735,7 +735,7 @@ static NSInteger OhrtFollowStatus(id user) {
 
 - (void)couldNotUnfollow:(NSString *)account {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Not confirmed"
-                                                                   message:@"Insta\u2060gram did not report the unfollow going through. Open the profile to check, and unfollow there if it did not."
+                                                                   message:@"Insta\u2060gram didn't report the unfollow going through. Open the profile to check, and unfollow there if it didn't."
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];

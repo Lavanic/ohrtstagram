@@ -94,23 +94,23 @@ static void OhrtExportSay(NSString *message) {
 // what to tell the user. Main thread.
 static NSString *OhrtExportKeep(id read) {
     if (![read isKindOfClass:[NSDictionary class]] || ![read[kOhrtFactsFileMark] isKindOfClass:[NSNumber class]] || ![read[@"people"] isKindOfClass:[NSDictionary class]]) {
-        return @"That is neither an unpacked Insta\u2060gram export nor a facts file made from one. Unpack the export's zip in Files, then pick the folder it makes.";
+        return @"That's neither an unpacked Insta\u2060gram export nor a facts file made from one. Unpack the export's zip in Files, then pick the folder it makes.";
     }
     if ([read[kOhrtFactsFileMark] integerValue] != 1) return @"That facts file was made by a newer export.py than this app knows how to read.";
     if (![read[@"people"] count]) return @"Nothing about any account was found in there. Ask for the export as JSON, with followers and following in it.";
     NSData *data = [NSJSONSerialization dataWithJSONObject:read options:0 error:nil];
-    if (!data) return @"What was read could not be kept.";
+    if (!data) return @"What was read couldn't be kept.";
     id user = OhrtExportUser();
     NSString *account = OhrtExportText(OhrtCall(user, @"pk"));
     NSString *username = OhrtExportText(OhrtCall(user, @"username")).lowercaseString;
-    if (!account.length) return @"Could not tell which account is signed in, so nothing was read in.";
+    if (!account.length) return @"Couldn't tell which account is signed in, so nothing was read in.";
     NSString *theirs = OhrtExportText(read[@"account"]).lowercaseString;
     if (theirs.length && username.length && ![theirs isEqualToString:username]) {
-        return [NSString stringWithFormat:@"That export is %@'s and you are signed in as %@. Nothing was read in.", theirs, username];
+        return [NSString stringWithFormat:@"That export is %@'s and you're signed in as %@. Nothing was read in.", theirs, username];
     }
     NSString *path = OhrtExportPath(account);
     [[NSFileManager defaultManager] createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
-    if (![data writeToFile:path atomically:YES]) return @"The file could not be kept on this phone.";
+    if (![data writeToFile:path atomically:YES]) return @"The file couldn't be kept on this phone.";
     [gOhrtExports removeObjectForKey:account];
     OhrtLog(@"export: read in, %lu accounts and %lu conversations", (unsigned long)[read[@"people"] count], (unsigned long)[read[@"threads"] count]);
     return [NSString stringWithFormat:@"Read in %lu accounts and %lu conversations, exported %@. Profiles show them from the next one you open.",
@@ -154,7 +154,7 @@ static NSString *OhrtExportKeep(id read) {
         });
         if (scoped) [url stopAccessingSecurityScopedResource];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            __block NSString *message = @"That could not be read.";
+            __block NSString *message = @"That couldn't be read.";
             OhrtTry(@"export", ^{
                 message = OhrtExportKeep(read);
             });

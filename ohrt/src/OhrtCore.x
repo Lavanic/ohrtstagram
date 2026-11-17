@@ -127,14 +127,11 @@ static void OhrtRegisterDefaults(void) {
         // icon. The launch guard still turns them off with the rest.
         kOhrtWordmarkKey : @YES,
         kOhrtNameKey : @YES,
-        // Asked for, and it only adds a line to a screen.
+        // On from the start: each only adds a line or a tab. Hidden likes
+        // also makes a request per post, within the caps in OhrtLikes.x.
         kOhrtFactsKey : @YES,
-        // Asked for. It reads who liked a hidden post, which is a request
-        // to Instagram per post, kept within the caps in OhrtLikes.x.
         kOhrtLikesKey : @YES,
-        // Asked for, and like the profile's it only adds a line.
         kOhrtPostFactsKey : @YES,
-        // Asked for: the tab that opens "about you".
         kOhrtAboutTabKey : @YES,
     }];
 }

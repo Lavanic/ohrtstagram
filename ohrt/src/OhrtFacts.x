@@ -31,9 +31,8 @@
 
 NSString *const kOhrtFactsKey = @"ohrt_facts";
 
-// The red of the calico jack, #ff0349, made light enough to read on a
-// dark page: that color was wanted, less harsh, then lighter. On a light
-// page it is the red itself.
+// The red of the calico jack, #ff0349, lightened to read on a dark page.
+// On a light page it is the red itself.
 static const uint32_t kOhrtFactsOnDark = 0xff8aa6;
 static const uint32_t kOhrtFactsOnLight = 0xff0349;
 static const CGFloat kOhrtFactsAbove = 2;
@@ -251,9 +250,8 @@ static OhrtScoreRange OhrtRangeOf(NSDictionary *scores) {
 // and as it is otherwise.
 static NSString *OhrtRankText(double score, NSDictionary *scores, BOOL scoreFirst) {
     OhrtScoreRange range = OhrtRangeOf(scores);
-    // Two thirds of the accounts in these lists came at exactly 0, with
-    // nothing between that and 0.38 (seen 2026-11-17): listed, not scored.
-    // A place is counted among the ones that were.
+    // A score of exactly 0 means listed, not scored. A place is counted
+    // among the accounts that were scored.
     NSUInteger above = 0, scored = 0;
     for (id value in scores.allValues) {
         if (![value isKindOfClass:[NSNumber class]]) continue;
@@ -280,10 +278,10 @@ static NSDictionary *OhrtDictionaryCopy(id value) {
 // its share sheets are sorted by. Each is a list of scores worked out on
 // Meta's servers, refreshed by the app and kept on the phone; a few people
 // the app has just talked to or seen active are boosted on the phone. The
-// share sheet's lists come first: they rank 150 people with a wide spread
-// and are what he sees when sharing. The "new message" list is left out:
-// its 41 scores sit within 0.13 of each other, so its order says little.
-// The first list that has the account is shown, under what it is for.
+// share sheet's lists come first: they rank the most people, with a wide
+// spread. The "new message" list is left out: its scores sit too close
+// together for its order to say much. The first list that has the account
+// is shown, under what it is for.
 static const struct {
     long long view;
     __unsafe_unretained NSString *label;
@@ -897,7 +895,7 @@ void OhrtInstallFacts(void) {
     dispatch_once(&once, ^{
         if (!OhrtFeatureReady(kOhrtFactsKey, @"facts")) return;
         if (!OhrtFactsControllerClass()) {
-            OhrtLog(@"facts: left off, this Instagram's lists are not the kind ours is made from");
+            OhrtLog(@"facts: left off, this Instagram's lists aren't the kind ours is made from");
             return;
         }
         %init(OhrtFacts);

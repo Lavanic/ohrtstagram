@@ -314,7 +314,7 @@ static NSArray *OhrtCutAtWall(NSArray *objects, NSTimeInterval *newest, BOOL *cu
         static BOOL said;
         if (!said) {
             said = YES;
-            OhrtLog(@"wall: this feed is not in time order, so it is left whole");
+            OhrtLog(@"wall: this feed isn't in time order, so it's left whole");
         }
         return objects;
     }

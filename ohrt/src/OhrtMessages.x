@@ -68,7 +68,7 @@ static void OhrtMessagesLook(id thread) {
     if (OhrtCallBool(about, @"isGroup")) return;
     id people = OhrtCall(about, @"users");
     if (![people isKindOfClass:[NSArray class]]) {
-        OhrtMessagesSay(@"a conversation does not list its people as expected");
+        OhrtMessagesSay(@"a conversation doesn't list its people as expected");
         return;
     }
     if ([people count] != 1) return;
