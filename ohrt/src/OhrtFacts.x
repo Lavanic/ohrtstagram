@@ -194,6 +194,10 @@ static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString 
     if (done.count) {
         done[0] = whole || !began ? [@"you: " stringByAppendingString:done[0]] : [NSString stringWithFormat:@"you since %@: %@", began, done[0]];
         [facts addObjectsFromArray:done];
+        // An export made before this app first ran leaves days in neither.
+        if (whole && OhrtActivityBegan() > OhrtExportDate() + 86400) {
+            [facts addObject:[NSString stringWithFormat:@"not counted %@ to %@", OhrtStamp(@(OhrtExportDate())), began]];
+        }
     }
 
     // The export has the conversation from its first message. One it does
