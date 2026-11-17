@@ -90,15 +90,19 @@ typedef NSString * (*OhrtAboutFormat)(id);
     [super viewDidLoad];
     self.title = @"about you";
     self.tableView.allowsSelection = NO;
+    [self refresh];
 }
 
-- (void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
+// Instagram's tab bar controller does not pass "will appear" on to a screen
+// laid over it, so the screen fills itself as it loads, and again whenever
+// the tab opens it.
+- (void)refresh {
     OhrtTry(@"about", ^{
         [self build];
         [self askNextOpen];
     });
     [self.tableView reloadData];
+    OhrtLog(@"about: %lu sections shown", (unsigned long)self.rows.count);
 }
 
 static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *features, NSString *label, NSString *key, OhrtAboutFormat format) {

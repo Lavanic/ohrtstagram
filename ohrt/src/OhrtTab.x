@@ -31,13 +31,18 @@ static const CGPoint kOhrtJack[] = {
 };
 
 static UIImage *OhrtJackImage(BOOL filled) {
-    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(24, 24)];
+    // Drawn larger than its 24 point box: the points leave more air around
+    // the shape than Instagram's own icons have, so at 24 it looked small
+    // beside them.
+    const CGFloat size = 29;
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(size, size)];
     UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        CGContextScaleCTM(context.CGContext, size / 24, size / 24);
         UIBezierPath *path = [UIBezierPath bezierPath];
         [path moveToPoint:kOhrtJack[0]];
         for (size_t index = 1; index < sizeof(kOhrtJack) / sizeof(kOhrtJack[0]); index++) [path addLineToPoint:kOhrtJack[index]];
         [path closePath];
-        path.lineWidth = 1.7;
+        path.lineWidth = 1.7 * 24 / size;
         path.lineJoinStyle = kCGLineJoinRound;
         [[UIColor blackColor] set];
         if (filled) [path fill];
