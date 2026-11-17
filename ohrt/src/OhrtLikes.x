@@ -151,7 +151,8 @@ static long long OhrtLikesCountIn(id source, BOOL *floor, NSString **told) {
     // A total above the stand-in's ceiling, or one the names do not pass,
     // is the real count.
     BOOL real = total > 3 || total >= named;
-    *floor = !real && listed >= kOhrtLikersFloor;
+    // With no real total, names still to come mean the count is a floor.
+    *floor = !real && (listed >= kOhrtLikersFloor || OhrtCallBool(source, @"moreAvailable"));
     if (told) *told = [NSString stringWithFormat:@"%lld named, a total of %lld given", named, total];
     return real ? MAX(total, named) : named;
 }
