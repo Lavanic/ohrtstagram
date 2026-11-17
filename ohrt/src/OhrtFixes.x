@@ -25,6 +25,10 @@
 @interface IGSearchEntityRouter : NSObject
 @end
 
+static BOOL OhrtNoRecents(void) {
+    return [SCIUtils getBoolPref:@"no_recent_searches"];
+}
+
 %group OhrtFixes
 
 // Upstream's cap on how many reels can be scrolled through cut every list
@@ -77,6 +81,40 @@
         OhrtPrefOffEnd(before);
     }
     ((UIViewController *)self).view.hidden = YES;
+}
+%end
+
+// "Do not save recent searches": on this Instagram two of upstream's hooks
+// no longer attach, so searches were still kept and the ones already kept
+// still showed. New ones are not kept, and the kept ones are not listed.
+%hook IGSearchEntityRouter
+- (id)initWithUserSession:(id)session analyticsModule:(id)module shouldAddToRecents:(BOOL)add mode:(NSUInteger)mode {
+    return %orig(session, module, add && !OhrtNoRecents(), mode);
+}
+%end
+
+%hook IGRecentSearchStore
+- (id)recentItems {
+    return OhrtNoRecents() ? @[] : %orig;
+}
+- (id)allItems {
+    return OhrtNoRecents() ? @[] : %orig;
+}
+%end
+
+%hook IGBlendedSearchRecentItemsOrderStore
+- (id)recentItems {
+    return OhrtNoRecents() ? @[] : %orig;
+}
+%end
+
+%hook IGDirectRecipientRecentSearchStorage
+- (void)_processRecentlySelectedRecipients:(id)recipients {
+    if (OhrtNoRecents()) return;
+    %orig;
+}
+- (BOOL)isEmpty {
+    return OhrtNoRecents() ? YES : %orig;
 }
 %end
 
