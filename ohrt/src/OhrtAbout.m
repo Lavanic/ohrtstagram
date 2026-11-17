@@ -124,6 +124,8 @@ static NSString *OhrtAboutFit(NSString *text, NSInteger width) {
 @property (nonatomic, copy) NSString *label, *value, *about;
 // For a meter: how much of it is lit, from 0 to 1.
 @property (nonatomic) double part;
+// For a ranked row: its place in the list, from 1.
+@property (nonatomic) NSUInteger place;
 @end
 
 @implementation OhrtAboutRow
@@ -315,9 +317,9 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
                     at++;
                     break;
                 case OhrtAboutKindRanked:
-                    [self put:[NSString stringWithFormat:@"%2lu", (unsigned long)place + 1] row:at column:2 colour:kOhrtAboutDim bold:NO];
-                    [self put:OhrtAboutFit(item.label, 18) row:at column:5 colour:kOhrtAboutName bold:NO];
-                    [self meter:item.part row:at column:24 cells:25 colours:close count:3];
+                    [self put:OhrtGrouped((long long)item.place) row:at end:7 colour:kOhrtAboutDim bold:NO];
+                    [self put:OhrtAboutFit(item.label, 18) row:at column:8 colour:kOhrtAboutName bold:NO];
+                    [self meter:item.part row:at column:27 cells:22 colours:close count:3];
                     [self put:item.value row:at end:columns - 2 colour:kOhrtAboutWhite bold:YES];
                     [self hit:item row:at column:1 width:columns - 2];
                     at++;
@@ -361,6 +363,8 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
 @property (nonatomic, strong) UIView *panel;
 @property (nonatomic, copy) NSString *nextOpen;
 @property (nonatomic) CGFloat bottomRoom;
+@property (nonatomic) BOOL waiting;
+@property (nonatomic) NSUInteger waited;
 @end
 
 @implementation OhrtAboutViewController
@@ -495,14 +499,26 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
                                                  @"order its suggestions, such as who to add to close friends and who to message. How the score is worked out stays on Meta's servers.\n\nInsta\u2060gram's name for "
                                                  @"it: coefficient_besties_list_ranking",
                                                  OhrtGrouped((long long)scores.count)];
+    // The first three, then eight more places spread down to the last, each
+    // the same number of times further down than the one before. The top of
+    // the list is too close together to tell apart as bars, and how long the
+    // list is differs from one account to the next.
+    NSUInteger count = ordered.count;
+    NSMutableOrderedSet<NSNumber *> *places = [NSMutableOrderedSet orderedSet];
+    for (NSUInteger place = 1; place <= MIN(count, 3); place++) [places addObject:@(place)];
+    if (count > 3) {
+        for (int step = 1; step <= 8; step++) [places addObject:@(MIN(count, (NSUInteger)llround(3 * pow(count / 3.0, step / 8.0))))];
+        [places addObject:@(count)];
+    }
     NSMutableArray<OhrtAboutRow *> *rows = [NSMutableArray array];
-    for (id key in ordered) {
-        if (rows.count >= 15) break;
+    for (NSNumber *place in places) {
+        id key = ordered[place.unsignedIntegerValue - 1];
         id score = scores[key];
         if (![score isKindOfClass:[NSNumber class]]) continue;
         NSString *name = names[[key description]];
         OhrtAboutRow *row = OhrtAboutPlain(name ? [@"@" stringByAppendingString:name] : [@"id " stringByAppendingString:[key description]], [NSString stringWithFormat:@"%.0f", [score doubleValue] * 100], about);
         row.part = [score doubleValue];
+        row.place = place.unsignedIntegerValue;
         [rows addObject:row];
     }
     if (total) *total = scores.count;
@@ -571,7 +587,25 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
 
     NSUInteger scored = 0;
     NSArray<OhrtAboutRow *> *closest = [self besties:&scored];
-    if (closest.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRanked, @"bestie_coefficient", [@"top of " stringByAppendingString:OhrtGrouped((long long)scored)], closest)];
+    if (closest.count) {
+        [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRanked, @"bestie_coefficient", [OhrtGrouped((long long)scored) stringByAppendingString:@" accounts scored"], closest)];
+        if (self.waited) OhrtLog(@"about: the scores came %lu seconds after the screen opened", (unsigned long)self.waited);
+        self.waited = 0;
+    } else if (!self.waiting && self.waited < 60) {
+        // Instagram fills its list of scores some time after it starts, so
+        // the screen looks again each second until the list is there.
+        self.waiting = YES;
+        __weak OhrtAboutViewController *weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            OhrtAboutViewController *strongSelf = weakSelf;
+            if (!strongSelf) return;
+            strongSelf.waiting = NO;
+            strongSelf.waited++;
+            OhrtTry(@"about", ^{
+                [strongSelf build];
+            });
+        });
+    }
 
     // Everything else it filled, under its own names.
     NSMutableSet<NSString *> *shown = [NSMutableSet setWithArray:@[
