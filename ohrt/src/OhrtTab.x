@@ -118,8 +118,8 @@ static void OhrtTabClose(void) {
             id button = buttons[index];
             if (button != gOhrtTabButton && [button isKindOfClass:[UIControl class]] && [(UIControl *)button isSelected]) gOhrtTabBefore = index;
         }
-        UIViewController *screen = OhrtAboutScreen();
-        screen.additionalSafeAreaInsets = UIEdgeInsetsMake(0, 0, bar.bounds.size.height, 0);
+        CGRect barFrame = [bar convertRect:bar.bounds toView:controller.view];
+        UIViewController *screen = OhrtAboutScreen(MAX(0, controller.view.bounds.size.height - barFrame.origin.y));
         [controller addChildViewController:screen];
         screen.view.frame = controller.view.bounds;
         screen.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
