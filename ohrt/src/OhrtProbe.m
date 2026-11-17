@@ -65,12 +65,21 @@ static void OhrtProbeDictionary(NSString *what, id dictionary) {
         OhrtLog(@"probe: %@ is %@", what, dictionary ? NSStringFromClass([dictionary class]) : @"not there");
         return;
     }
+    // In lines of twenty, so that none is cut short by the log.
+    NSArray *keys = [[dictionary allKeys] sortedArrayUsingComparator:^NSComparisonResult(id one, id other) {
+        return [[one description] compare:[other description]];
+    }];
+    OhrtLog(@"probe: %@ has %lu", what, (unsigned long)keys.count);
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
-    for (id key in dictionary) {
-        if (parts.count >= 40) break;
-        [parts addObject:[NSString stringWithFormat:@"%@ %@", OhrtProbeShow([key description]), OhrtProbeShow(dictionary[key])]];
+    for (NSUInteger index = 0; index < keys.count && index < 400; index++) {
+        id value = dictionary[keys[index]];
+        [parts addObject:[NSString stringWithFormat:@"%@ %@", OhrtProbeShow([keys[index] description]), OhrtProbeShow(value)]];
+        if (parts.count == 20 || index + 1 == keys.count) {
+            OhrtLog(@"probe: %@: %@", what, [parts componentsJoinedByString:@", "]);
+            [parts removeAllObjects];
+        }
+        if ([value isKindOfClass:[NSDictionary class]] && [value count] > 2) OhrtProbeDictionary([NSString stringWithFormat:@"%@.%@", what, OhrtProbeShow([keys[index] description])], value);
     }
-    OhrtLog(@"probe: %@ has %lu: %@", what, (unsigned long)[dictionary count], [parts componentsJoinedByString:@", "]);
 }
 
 void OhrtProbeReel(id reel) {
@@ -150,10 +159,13 @@ void OhrtProbeSession(void) {
                 if ([casper respondsToSelector:estimate] && ![[NSUserDefaults standardUserDefaults] boolForKey:asked]) {
                     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:asked];
                     [[NSUserDefaults standardUserDefaults] synchronize];
-                    void (^answer)(void *, void *, double, double) = ^(void *first, void *second, double one, double two) {
-                        OhrtLog(@"probe: the next-open predictor answered: values %p %p, numbers %.6g %.6g", first, second, one, two);
+                    // The first asking gave back what reads as a float of
+                    // about 160 in the first number slot and 161 in the first
+                    // value slot. Both readings are logged to tell which.
+                    void (^answer)(long long, float) = ^(long long whole, float minutes) {
+                        OhrtLog(@"probe: the next-open predictor answered: %lld as a whole number, %.2f as a fraction", whole, minutes);
                     };
-                    ((void (*)(id, SEL, id, id))objc_msgSend)(casper, estimate, answer, dispatch_get_main_queue());
+                    ((void (*)(id, SEL, id, id))objc_msgSend)(casper, estimate, (id)answer, dispatch_get_main_queue());
                     OhrtLog(@"probe: the next-open predictor was asked");
                 }
             });
