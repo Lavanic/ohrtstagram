@@ -492,6 +492,14 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
         id username = OhrtCallValue(user, @"username");
         if (pk && [username isKindOfClass:[NSString class]]) names[[pk description]] = username;
     }
+    // Most of the list comes at exactly 0: accounts Instagram listed and
+    // did not score. They are left out, of the places and of the count.
+    NSMutableDictionary *real = [NSMutableDictionary dictionary];
+    for (id key in scores) {
+        if ([scores[key] isKindOfClass:[NSNumber class]] && [scores[key] doubleValue] > 0) real[key] = scores[key];
+    }
+    scores = real;
+    if (!scores.count) return @[];
     NSArray *ordered = [scores keysSortedByValueUsingComparator:^NSComparisonResult(id one, id other) {
         return [other compare:one];
     }];
@@ -504,6 +512,13 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
     // the list is too close together to tell apart as bars, and how long the
     // list is differs from one account to the next.
     NSUInteger count = ordered.count;
+    static BOOL told;
+    if (!told) {
+        told = YES;
+        NSUInteger nameless = 0;
+        for (id key in ordered) nameless += names[[key description]] == nil;
+        OhrtLog(@"about: %lu accounts scored above zero, %lu of them with no user in the list", (unsigned long)count, (unsigned long)nameless);
+    }
     NSMutableOrderedSet<NSNumber *> *places = [NSMutableOrderedSet orderedSet];
     for (NSUInteger place = 1; place <= MIN(count, 3); place++) [places addObject:@(place)];
     if (count > 3) {

@@ -244,13 +244,18 @@ static OhrtScoreRange OhrtRangeOf(NSDictionary *scores) {
 // and as it is otherwise.
 static NSString *OhrtRankText(double score, NSDictionary *scores, BOOL scoreFirst) {
     OhrtScoreRange range = OhrtRangeOf(scores);
-    NSUInteger above = 0;
+    // Two thirds of the accounts in these lists came at exactly 0, with
+    // nothing between that and 0.38 (seen 2026-11-17): listed, not scored.
+    // A place is counted among the ones that were.
+    NSUInteger above = 0, scored = 0;
     for (id value in scores.allValues) {
-        if ([value isKindOfClass:[NSNumber class]] && [value doubleValue] > score) above++;
+        if (![value isKindOfClass:[NSNumber class]]) continue;
+        if ([value doubleValue] > score) above++;
+        if ([value doubleValue] > 0) scored++;
     }
     NSString *shown = range.total && range.low >= 0 && range.high <= 1 ? [NSString stringWithFormat:@"%.0f/100", score * 100] : [NSString stringWithFormat:@"%.2f", score];
-    if (!range.total) return shown;
-    NSString *place = [NSString stringWithFormat:@"%@ of %@", OhrtOrdinal(above + 1), OhrtGrouped((long long)range.total)];
+    if (!scored) return shown;
+    NSString *place = [NSString stringWithFormat:@"%@ of %@", OhrtOrdinal(above + 1), OhrtGrouped((long long)scored)];
     return scoreFirst ? [NSString stringWithFormat:@"%@ (%@)", shown, place] : [NSString stringWithFormat:@"%@ (%@)", place, shown];
 }
 
@@ -390,12 +395,12 @@ static NSString *OhrtAddRankings(NSMutableArray<NSString *> *facts, NSMutableArr
     NSDictionary *besties = byName[@"coefficient_besties_list_ranking"];
     BOOL agree = search && besties && OhrtStoredListsAgree(search, besties);
     id bestiesScore = OhrtScoreIn(besties, pk);
-    if ([bestiesScore isKindOfClass:[NSNumber class]]) {
+    if ([bestiesScore isKindOfClass:[NSNumber class]] && [bestiesScore doubleValue] > 0) {
         [fields addObject:@"coefficient_besties_list_ranking"];
         [facts addObject:[@"bestie_coefficient " stringByAppendingString:OhrtRankText([bestiesScore doubleValue], besties, YES)]];
     }
     id searchScore = OhrtScoreIn(search, pk);
-    if (haveLive || agree || ![searchScore isKindOfClass:[NSNumber class]]) return nil;
+    if (haveLive || agree || ![searchScore isKindOfClass:[NSNumber class]] || [searchScore doubleValue] <= 0) return nil;
     [fields addObject:@"coefficient_rank_recipient_user_suggestion"];
     return [@"dm_search_coefficient " stringByAppendingString:OhrtRankText([searchScore doubleValue], search, YES)];
 }
