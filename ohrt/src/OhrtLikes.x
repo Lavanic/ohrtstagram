@@ -221,6 +221,8 @@ static BOOL gOhrtPumpScheduled;
 // A post whose newest-first read was refused, waiting out the gap before
 // the usual list is tried. Nothing else is read meanwhile.
 static NSString *gOhrtFallingBack;
+// Until when the hourly or daily cap holds, as far as is known.
+static NSTimeInterval gOhrtCappedUntil;
 // Newest-first reads refused in a row with nothing read in between.
 static NSUInteger gOhrtRefusedRun;
 static const NSUInteger kOhrtRefusedRunMost = 3;
@@ -267,6 +269,7 @@ static BOOL OhrtLikesMayAsk(NSTimeInterval *retryAt) {
         if (!said) OhrtLog(@"likes: the %@ cap on reading likers is reached, waiting", gOhrtAsked.count >= kOhrtLikersPerDay ? @"daily" : @"hourly");
         said = YES;
         *retryAt = now + 300;
+        gOhrtCappedUntil = *retryAt;
         return NO;
     }
     return YES;
@@ -291,11 +294,20 @@ static void OhrtLikesDrop(NSString *mediaId) {
     OhrtLikesAnnounce(mediaId);
 }
 
-BOOL OhrtLikesWillCount(NSString *mediaId) {
-    if (!mediaId || !OhrtFeature(kOhrtLikesKey) || OhrtSafeLaunch()) return NO;
+NSString *OhrtLikesWaitText(NSString *mediaId) {
+    if (!mediaId || !OhrtFeature(kOhrtLikesKey) || OhrtSafeLaunch() || OhrtLikesEntry(mediaId)) return nil;
     OhrtLikesLoadLimits();
-    if (gOhrtPausedUntil > [NSDate date].timeIntervalSince1970) return NO;
-    return ![gOhrtSkipped containsObject:mediaId];
+    NSTimeInterval now = [NSDate date].timeIntervalSince1970;
+    if (gOhrtPausedUntil > now) {
+        static NSDateFormatter *clock;
+        if (!clock) {
+            clock = [NSDateFormatter new];
+            clock.dateFormat = @"HH:mm";
+        }
+        return [@"hidden likes paused until " stringByAppendingString:[clock stringFromDate:[NSDate dateWithTimeIntervalSince1970:gOhrtPausedUntil]]];
+    }
+    if (gOhrtCappedUntil > now) return @"hidden likes at the limit for now";
+    return [gOhrtSkipped containsObject:mediaId] ? nil : @"counting hidden likes\u2026";
 }
 
 static void OhrtLikesPump(void);
@@ -361,7 +373,8 @@ static BOOL OhrtLikersStart(NSString *mediaId, BOOL chrono) {
         if (refused) {
             gOhrtPausedUntil = [NSDate date].timeIntervalSince1970 + kOhrtLikersPause;
             OhrtLikesSaveLimits();
-            NSArray<NSString *> *waiting = gOhrtWanted.array;
+            // A copy: an ordered set's array follows the set as it empties.
+            NSArray<NSString *> *waiting = [gOhrtWanted.array copy];
             [gOhrtWanted removeAllObjects];
             for (NSString *other in waiting) OhrtLikesAnnounce(other);
             gOhrtRefusedRun = 0;
@@ -405,8 +418,13 @@ static void OhrtLikesPump(void) {
     NSTimeInterval retryAt = 0;
     if (!OhrtLikesMayAsk(&retryAt)) {
         if (retryAt > 0) OhrtLikesPumpAt(retryAt);
+        // Posts waiting under a cap say so in place of "counting".
+        if (gOhrtCappedUntil > [NSDate date].timeIntervalSince1970) {
+            for (NSString *waiting in [gOhrtWanted.array copy]) OhrtLikesAnnounce(waiting);
+        }
         return;
     }
+    gOhrtCappedUntil = 0;
     // Newest wanted first: the post on screen now.
     NSString *mediaId = gOhrtWanted.lastObject;
     if (OhrtLikesIsFresh(mediaId)) {

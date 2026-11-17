@@ -91,9 +91,9 @@ FOUNDATION_EXPORT void OhrtLikesWant(NSString *mediaId);
 FOUNDATION_EXPORT void OhrtLikesUnwant(NSString *mediaId);
 // Counted within the last few hours, so not read again yet.
 FOUNDATION_EXPORT BOOL OhrtLikesIsFresh(NSString *mediaId);
-// Whether a hidden count not yet read is still going to be: the switch is
-// on, reading is not paused, and the post was not given up on.
-FOUNDATION_EXPORT BOOL OhrtLikesWillCount(NSString *mediaId);
+// What to show for a hidden count not read yet: that it is being counted,
+// or that reading is paused or capped. nil when nothing is coming.
+FOUNDATION_EXPORT NSString *OhrtLikesWaitText(NSString *mediaId);
 FOUNDATION_EXPORT NSString *const kOhrtLikesCountedNotification;
 
 // The small red text of the facts lines (OhrtFacts.x), on a profile and

@@ -272,7 +272,7 @@ static NSString *OhrtPostShown(id row) {
     long long count = 0;
     BOOL more = NO;
     if (OhrtLikesCountedNumber(mediaId, &count, &more)) return OhrtPostJoined(OhrtPostLikesFact(count, more), base);
-    return OhrtPostJoined(OhrtLikesWillCount(mediaId) ? @"counting hidden likes\u2026" : nil, base);
+    return OhrtPostJoined(OhrtLikesWaitText(mediaId), base);
 }
 
 static CGFloat OhrtPostTextHeight(NSString *text, CGFloat width) {
