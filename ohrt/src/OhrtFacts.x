@@ -819,12 +819,13 @@ static NSArray *OhrtViewersStrangersFirst(NSArray *objects, NSString **named) {
     NSMutableArray<NSNumber *> *slots = [NSMutableArray array];
     NSMutableArray *strangers = [NSMutableArray array], *others = [NSMutableArray array];
     NSMutableArray<NSString *> *names = [NSMutableArray array];
-    NSUInteger saysFollows = 0, exportSays = 0;
+    NSUInteger saysFollows = 0, exportSays = 0, known = 0;
     for (NSUInteger index = 0; index < objects.count; index++) {
         id user = OhrtViewerAccount(objects[index]);
         if (!user) continue;
         [slots addObject:@(index)];
         if (OhrtCallBool(user, @"followsCurrentUser")) saysFollows++;
+        if (OhrtCallValue(user, @"friendshipStatus")) known++;
         NSString *username = OhrtText(OhrtCallValue(user, @"username"));
         if (username && OhrtExportPerson(username)[@"follows_you"]) exportSays++;
         if (OhrtViewerFollows(user)) {
@@ -839,9 +840,11 @@ static NSArray *OhrtViewersStrangersFirst(NSArray *objects, NSString **named) {
         told++;
         NSMutableSet<NSString *> *kinds = [NSMutableSet set];
         for (id object in objects) [kinds addObject:NSStringFromClass([object class])];
-        OhrtLog(@"story stats: a viewer list of %lu rows (%@), %lu viewers, %lu say they follow you, the export has %lu as followers", (unsigned long)objects.count,
-                [kinds.allObjects componentsJoinedByString:@" "], (unsigned long)slots.count, (unsigned long)saysFollows, (unsigned long)exportSays);
+        OhrtLog(@"story stats: a viewer list of %lu rows (%@), %lu viewers, %lu say they follow you, %lu come with a friendship status, the export has %lu as followers", (unsigned long)objects.count,
+                [kinds.allObjects componentsJoinedByString:@" "], (unsigned long)slots.count, (unsigned long)saysFollows, (unsigned long)known, (unsigned long)exportSays);
     }
+    // A list that says nothing about who follows you would name everyone.
+    if (!saysFollows && !known && !exportSays) return objects;
     if (!strangers.count) return objects;
     NSMutableArray *changed = [objects mutableCopy];
     NSArray *ordered = [strangers arrayByAddingObjectsFromArray:others];
