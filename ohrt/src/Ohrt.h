@@ -76,6 +76,8 @@ FOUNDATION_EXPORT void OhrtProbeSession(void);
 FOUNDATION_EXPORT void OhrtProbeMedia(id media);
 FOUNDATION_EXPORT void OhrtProbeThread(id metadata);
 FOUNDATION_EXPORT void OhrtProbeUser(id user, BOOL mine);
+// Lets a sideloaded copy make its device key pairs (OhrtSideloadKeys.m).
+FOUNDATION_EXPORT void OhrtInstallSideloadKeys(void);
 FOUNDATION_EXPORT void OhrtProbeRecipient(id entity);
 // Makes one of upstream's switches read as off on this thread until the
 // matching End, which takes what Begin returned. The key must outlive the

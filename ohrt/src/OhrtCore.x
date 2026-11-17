@@ -169,6 +169,7 @@ static void OhrtAppLaunching(void) {
     OhrtInstallLikes();
     OhrtInstallPostFacts();
     OhrtInstallFixes();
+    OhrtInstallSideloadKeys();
     OhrtInstallTab();
     OhrtInstallSuggested();
     OhrtInstallDMMode();

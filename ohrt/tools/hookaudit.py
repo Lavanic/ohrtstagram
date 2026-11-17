@@ -35,7 +35,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SDK = os.path.expanduser(os.environ.get("THEOS", "~/theos") + "/sdks/iPhoneOS16.2.sdk/System/Library/Frameworks")
 SYSTEM_FRAMEWORKS = ("UIKit", "Foundation", "QuartzCore", "AVFoundation", "AVKit", "WebKit", "Photos", "PhotosUI",
-                     "CoreGraphics", "SafariServices", "QuickLook", "MessageUI", "StoreKit", "UserNotifications")
+                     "CoreGraphics", "SafariServices", "AuthenticationServices", "QuickLook", "MessageUI", "StoreKit", "UserNotifications")
 
 sys.path.insert(0, HERE)
 from classdump import db_path, pinned_version, split_types  # noqa: E402
@@ -216,7 +216,7 @@ def audit_hook(app, cls, methods):
         return "own", []
     name = app.resolve(cls)
     if name is None:
-        if re.match(r"^(UI|NS|CA|AV|WK|SF|PH|MK|CL|UN|CK|_UI|QL|LS)[A-Z]", cls):
+        if re.match(r"^(UI|NS|CA|AV|WK|SF|PH|MK|CL|UN|CK|_UI|QL|LS|AS)[A-Z]", cls):
             return "system", []
         return "gone", ["the class is not in the app"]
     chain, outside = app.chain(name)
@@ -289,7 +289,7 @@ def main(argv):
             text = strip_comments(handle.read())
         for match in LOOKUP.finditer(text):
             cls = match.group(1)
-            if app.resolve(cls) is None and not re.match(r"^(UI|NS|CA|AV|WK|SF|PH|MK|CL|UN|CK|_UI|QL|LS|FLEX|JG)[A-Z_]", cls):
+            if app.resolve(cls) is None and not re.match(r"^(UI|NS|CA|AV|WK|SF|PH|MK|CL|UN|CK|_UI|QL|LS|AS|FLEX|JG)[A-Z_]", cls):
                 lookups_gone.append(f"{cls}  ({path}:{text.count(chr(10), 0, match.start()) + 1})")
         for match in NEED.finditer(text):
             on_class, feature, cls, selector = match.groups()
