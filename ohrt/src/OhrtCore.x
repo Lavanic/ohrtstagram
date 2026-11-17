@@ -134,6 +134,8 @@ static void OhrtRegisterDefaults(void) {
         kOhrtLikesKey : @YES,
         // Asked for, and like the profile's it only adds a line.
         kOhrtPostFactsKey : @YES,
+        // Asked for: the tab that opens "about you".
+        kOhrtAboutTabKey : @YES,
     }];
 }
 
@@ -170,6 +172,7 @@ static void OhrtAppLaunching(void) {
     OhrtInstallLikes();
     OhrtInstallPostFacts();
     OhrtInstallFixes();
+    OhrtInstallTab();
     OhrtInstallSuggested();
     OhrtInstallDMMode();
     OhrtInstallFollowing();

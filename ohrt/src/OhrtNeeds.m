@@ -103,6 +103,14 @@ static const OhrtNeed kOhrtNeeds[] = {
     OHRT_NEED("storystats", "IGStoryViewersListViewController", "objectsForListAdapter:"),
     OHRT_NEED("storystats", "IGStoryViewersListViewController", "listAdapter:sectionControllerForObject:"),
 
+    OHRT_NEED("abouttab", "IGTabBarController", "_updateTabBarButtonsAndUpdateViewControllersIfNeeded"),
+    OHRT_NEED("abouttab", "IGTabBarController", "_setSelectedTabBarSurface:isTabBarAction:animated:navigationAction:skipMainFeedFetch:"),
+    OHRT_NEED("abouttab", "IGTabBar", "addTabButton:"),
+    OHRT_NEED("abouttab", "IGTabBar", "clearTabButtons"),
+    OHRT_NEED("abouttab", "IGTabBar", "buttons"),
+    OHRT_NEED("abouttab", "IGTabBar", "setSelectedTabBarItemIndex:"),
+    OHRT_NEED("abouttab", "IGLiquidGlassInteractiveTabBar", "setSelectedTabBarItemIndex:"),
+
     OHRT_NEED("suggested", "IGProfileHeaderView", "objectsForListAdapter:"),
 
     OHRT_NEED("dm", "IGTabBarController", "viewWillAppear:"),
@@ -180,7 +188,7 @@ NSString *OhrtSelfCheck(void) {
     NSString *instagram = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     [report appendFormat:@"ohrtstagram %@ (%@) on Insta\u2060gram %@, iOS %@\n", OHRT_VERSION, OHRT_BUILD, instagram, [UIDevice currentDevice].systemVersion];
     [report appendFormat:@"safe mode this start: %@\n", OhrtSafeLaunch() ? @"yes" : @"no"];
-    for (NSString *feature in @[ @"start", @"wordmark", @"facts", @"activity", @"messages", @"likes", @"postfacts", @"storystats", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
+    for (NSString *feature in @[ @"start", @"wordmark", @"facts", @"activity", @"messages", @"likes", @"postfacts", @"storystats", @"abouttab", @"following", @"wall", @"dm", @"followback", @"unfollow" ]) {
         NSString *missing = OhrtMissing(feature);
         [report appendFormat:@"%@: %@\n", feature, missing ? [@"missing " stringByAppendingString:missing] : @"ok"];
     }

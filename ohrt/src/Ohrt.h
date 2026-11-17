@@ -27,6 +27,7 @@ FOUNDATION_EXPORT NSString *const kOhrtNameKey;
 FOUNDATION_EXPORT NSString *const kOhrtFactsKey;
 FOUNDATION_EXPORT NSString *const kOhrtLikesKey;
 FOUNDATION_EXPORT NSString *const kOhrtPostFactsKey;
+FOUNDATION_EXPORT NSString *const kOhrtAboutTabKey;
 
 FOUNDATION_EXPORT BOOL OhrtBool(NSString *key);
 
@@ -61,6 +62,9 @@ FOUNDATION_EXPORT void OhrtInstallMessages(void);
 FOUNDATION_EXPORT void OhrtInstallLikes(void);
 FOUNDATION_EXPORT void OhrtInstallPostFacts(void);
 FOUNDATION_EXPORT void OhrtInstallFixes(void);
+FOUNDATION_EXPORT void OhrtInstallTab(void);
+// The "about you" screen (OhrtAbout.m).
+FOUNDATION_EXPORT UIViewController *OhrtAboutScreen(void);
 
 // Log-only probes of what Instagram holds and does not show (OhrtProbe.m).
 FOUNDATION_EXPORT void OhrtProbeSession(void);

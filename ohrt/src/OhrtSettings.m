@@ -62,6 +62,7 @@ static NSDictionary *OhrtSection(NSString *header, NSArray *rows, NSString *foot
             OhrtRestartSwitch(@"ohrtstagram marks", @"Our wordmark at the top of the home feed and our mark on the login screen", kOhrtWordmarkKey),
             OhrtRestartSwitch(@"ohrtstagram in text", @"Buttons, titles and menus say ohrtstagram", kOhrtNameKey),
             OhrtSwitch(@"Grayscale", @"Shows the whole app in grey", kOhrtGrayscaleKey),
+            OhrtRestartSwitch(@"About you tab", @"A tab after home with what Insta\u2060gram keeps about you", kOhrtAboutTabKey),
         ], nil),
     ];
 }
