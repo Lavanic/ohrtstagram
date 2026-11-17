@@ -235,6 +235,7 @@ static NSString *OhrtPostText(id media) {
     if (sees) [facts addObject:[sees hasPrefix:@"alt text "] ? sees : [@"ai sees: " stringByAppendingString:sees]];
 
     OhrtPostSayFields(fields);
+    OhrtProbeMedia(media);
     return facts.count ? [facts componentsJoinedByString:@", "] : nil;
 }
 

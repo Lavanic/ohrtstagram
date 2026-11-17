@@ -73,6 +73,7 @@ static void OhrtMessagesLook(id thread) {
     }
     if ([people count] != 1) return;
     NSString *pk = OhrtMessagesText(OhrtCall([people firstObject], @"pk"));
+    OhrtProbeThread(about);
     id messages = OhrtCall(thread, @"publishedMessageSet");
     if (!pk.length || ![messages respondsToSelector:@selector(countByEnumeratingWithState:objects:count:)]) return;
 

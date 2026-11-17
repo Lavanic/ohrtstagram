@@ -307,7 +307,10 @@ static BOOL OhrtAddLiveRanking(NSMutableArray<NSString *> *facts, NSMutableArray
             NSArray *users = OhrtCallValue(recipient, @"users");
             if ([users isKindOfClass:[NSArray class]] && users.count == 1 && ![OhrtCallValue(recipient, @"isGroupThread") boolValue]) found = OhrtText(OhrtCallValue(users.firstObject, @"pk"));
         }
-        if ([found isEqualToString:pk]) [keys addObject:entityId];
+        if ([found isEqualToString:pk]) {
+            [keys addObject:entityId];
+            OhrtProbeRecipient(entity);
+        }
     }
     if (!keys.count) return NO;
     for (size_t index = 0; index < sizeof(kOhrtLiveViews) / sizeof(kOhrtLiveViews[0]); index++) {
@@ -408,6 +411,7 @@ static void OhrtAddTray(NSMutableArray<NSString *> *facts, NSMutableArray<NSStri
     id reel = ((id (*)(id, SEL, id))objc_msgSend)(map, stored, pk);
     if (!reel) return;
     [fields addObject:@"tray_reel"];
+    OhrtProbeReel(reel);
     id ranker = OhrtCallValue(reel, @"rankerScores");
     id tap = OhrtCallValue(ranker, @"ptap");
     // The first stories seen all came with the same 0.2115, a default
@@ -485,6 +489,7 @@ static void OhrtAddScores(NSMutableArray<NSString *> *facts, id user, NSString *
 }
 
 static NSString *OhrtFactsText(id user) {
+    OhrtProbeSession();
     NSString *pk = OhrtText(OhrtCall(user, @"pk"));
     if (!pk.length) return nil;
     NSMutableArray<NSString *> *facts = [NSMutableArray arrayWithObject:[@"id " stringByAppendingString:pk]];

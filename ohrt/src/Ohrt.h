@@ -61,6 +61,13 @@ FOUNDATION_EXPORT void OhrtInstallMessages(void);
 FOUNDATION_EXPORT void OhrtInstallLikes(void);
 FOUNDATION_EXPORT void OhrtInstallPostFacts(void);
 FOUNDATION_EXPORT void OhrtInstallFixes(void);
+
+// Log-only probes of what Instagram holds and does not show (OhrtProbe.m).
+FOUNDATION_EXPORT void OhrtProbeSession(void);
+FOUNDATION_EXPORT void OhrtProbeReel(id reel);
+FOUNDATION_EXPORT void OhrtProbeMedia(id media);
+FOUNDATION_EXPORT void OhrtProbeThread(id metadata);
+FOUNDATION_EXPORT void OhrtProbeRecipient(id entity);
 // Makes one of upstream's switches read as off on this thread until the
 // matching End, which takes what Begin returned. The key must outlive the
 // pair: pass a literal.
