@@ -62,6 +62,24 @@
 }
 %end
 
+// Upstream hid the explore grid by not letting its screen set itself up at
+// all. It is set up as usual here and then hidden.
+%hook IGExploreGridViewController
+- (void)viewDidLoad {
+    if (![SCIUtils getBoolPref:@"hide_explore_grid"]) {
+        %orig;
+        return;
+    }
+    void *before = OhrtPrefOffBegin(@"hide_explore_grid");
+    @try {
+        %orig;
+    } @finally {
+        OhrtPrefOffEnd(before);
+    }
+    ((UIViewController *)self).view.hidden = YES;
+}
+%end
+
 %end
 
 void OhrtInstallFixes(void) {
