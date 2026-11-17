@@ -526,7 +526,7 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
         self.backdrop.alpha = 0.05;
         CAGradientLayer *fade = [CAGradientLayer layer];
         fade.colors = @[ (id)[UIColor whiteColor].CGColor, (id)[UIColor whiteColor].CGColor, (id)[UIColor clearColor].CGColor ];
-        fade.locations = @[ @0, @0.55, @1 ];
+        fade.locations = @[ @0, @0.9, @1 ];
         self.backdrop.layer.mask = fade;
         [self.scroll addSubview:self.backdrop];
     }
