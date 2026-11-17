@@ -36,14 +36,14 @@ Off by default, and not tried on a phone yet:
 You need an iPhone, a free Apple account, and a computer once.
 
 1. **Get the IPA from me.** It isn't in releases because it has Instagram's app in it.
-2. **Install [SideStore](https://sidestore.io).** This is the part that needs the computer.
+2. **Install [SideStore](https://sidestore.io) and LocalDevVPN.** SideStore is the part that needs the computer. LocalDevVPN is free on the App Store and has to be on whenever SideStore installs or refreshes an app.
 3. **Get the IPA onto your phone.** AirDrop or Files.
 4. **Add it.** SideStore, My Apps, the plus, pick the IPA.
 5. **Open it and log in.** It sits next to the real Instagram.
 
 On a free Apple account:
 
-- Apps expire after 7 days. SideStore refreshes them. If it won't open, refresh it there.
+- Apps expire after 7 days. SideStore refreshes them. If it won't open, turn LocalDevVPN on and refresh it there.
 - Three sideloaded apps max, SideStore included.
 - No push notifications.
 
