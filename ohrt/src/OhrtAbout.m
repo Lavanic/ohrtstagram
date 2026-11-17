@@ -154,6 +154,8 @@ static NSString *OhrtAboutFit(NSString *text, NSInteger width) {
 
 static const NSInteger kOhrtAboutColumns = 56;
 static const CGFloat kOhrtAboutSide = 5, kOhrtAboutTop = 8;
+// The title, the hint under it and an empty row come before the boxes.
+static const NSInteger kOhrtAboutFirstRow = 3;
 
 @interface OhrtAboutPage : UIView
 @property (nonatomic, copy) NSArray<OhrtAboutBox *> *boxes;
@@ -200,7 +202,7 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
 
 - (CGFloat)heightForWidth:(CGFloat)width {
     [self measure:width];
-    NSInteger lines = 2;
+    NSInteger lines = kOhrtAboutFirstRow;
     for (OhrtAboutBox *box in self.boxes) lines += [self linesIn:box] + 2;
     return kOhrtAboutTop + lines * _ch + 12;
 }
@@ -218,7 +220,7 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
 }
 
 - (CGRect)areaOfBox:(OhrtAboutBox *)wanted {
-    NSInteger row = 2;
+    NSInteger row = kOhrtAboutFirstRow;
     for (OhrtAboutBox *box in self.boxes) {
         NSInteger lines = [self linesIn:box];
         if (box == wanted) return CGRectMake(0, [self y:row], self.bounds.size.width, (lines + 2) * _ch);
@@ -397,13 +399,14 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
     if (collect) _hits = [NSMutableArray array];
     _hitsStale = NO;
     const NSInteger columns = kOhrtAboutColumns, inner = columns - 4, middle = columns / 2;
-    if (CGRectGetMinY(rect) < [self y:1]) {
+    if (CGRectGetMinY(rect) < [self y:2]) {
         [self put:@"hidden account data" row:0 column:1 color:kOhrtAboutWhite bold:YES];
         [self put:[@"ohrtstagram " stringByAppendingString:OHRT_VERSION] row:0 end:columns - 1 color:kOhrtAboutDim bold:NO];
+        [self put:@"click any row to get more information on what it means" row:1 column:1 color:kOhrtAboutDim bold:NO];
     }
     static const uint32_t rates[] = {0xf05050, 0xff40b6, 0x4897d4, 0x50f095, 0xf0c050};
     static const uint32_t close[] = {0x4897d4, 0x8080ff, 0xff40b6};
-    NSInteger row = 2;
+    NSInteger row = kOhrtAboutFirstRow;
     NSUInteger index = 0;
     for (OhrtAboutBox *box in self.boxes) {
         NSInteger lines = [self linesIn:box];
@@ -796,7 +799,6 @@ static NSString *OhrtAboutBestieMeaning(NSUInteger scored) {
                               @"last week, how long you stayed, the time of day, your unread messages and which screen you last left from. Insta\u2060gram uses the guess to decide when to "
                               @"fetch new posts in the background.\n\nInsta\u2060gram's name for it: IGCasper, minutes_to_next_target_event") ]);
     next.under = @"worked out from when and how often you open it";
-    next.foot = @"tap a row for what it means";
     [boxes addObject:next];
 
     NSMutableArray<OhrtAboutRow *> *rows = [NSMutableArray array];
