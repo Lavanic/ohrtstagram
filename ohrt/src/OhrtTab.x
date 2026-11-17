@@ -118,7 +118,7 @@ static void OhrtTabClose(void) {
             id button = buttons[index];
             if (button != gOhrtTabButton && [button isKindOfClass:[UIControl class]] && [(UIControl *)button isSelected]) gOhrtTabBefore = index;
         }
-        UINavigationController *screen = [[UINavigationController alloc] initWithRootViewController:OhrtAboutScreen()];
+        UIViewController *screen = OhrtAboutScreen();
         screen.additionalSafeAreaInsets = UIEdgeInsetsMake(0, 0, bar.bounds.size.height, 0);
         [controller addChildViewController:screen];
         screen.view.frame = controller.view.bounds;
