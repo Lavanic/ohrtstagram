@@ -53,14 +53,27 @@ static id OhrtFindController(UIViewController *root, Class cls) {
 
 // The session of the account that is on screen.
 id OhrtCurrentSession(void) {
-    Class tabBar = NSClassFromString(@"IGTabBarController");
+    // Asked for many times a screen. The tab bar controller found last is
+    // used for as long as it is still in a window, which it stops being
+    // when another account takes over.
+    static __weak UIViewController *known;
+    static Class tabBar;
+    UIViewController *last = known;
+    if (last.viewIfLoaded.window) {
+        id session = OhrtCall(last, @"userSession");
+        if (session) return session;
+    }
+    if (!tabBar) tabBar = NSClassFromString(@"IGTabBarController");
     if (!tabBar) return nil;
     for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
         if (![scene isKindOfClass:[UIWindowScene class]]) continue;
         for (UIWindow *window in ((UIWindowScene *)scene).windows) {
             id controller = OhrtFindController(window.rootViewController, tabBar);
             id session = OhrtCall(controller, @"userSession");
-            if (session) return session;
+            if (session) {
+                known = controller;
+                return session;
+            }
         }
     }
     return nil;
