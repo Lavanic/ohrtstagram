@@ -32,9 +32,39 @@ static char kOhrtWalledKey;
 static char kOhrtWallViewKey;
 static char kOhrtExtraHeightKey;
 
+static NSString *OhrtWallAccount(void) {
+    return [OhrtCall(OhrtCall(OhrtCurrentSession(), @"user"), @"pk") description];
+}
+
+// The mark is kept for each account. One kept before that was so goes to
+// the first account that asks.
+static NSString *OhrtWallKeyNow(void) {
+    NSString *account = OhrtWallAccount();
+    if (!account.length) return kOhrtCaughtUpKey;
+    NSString *key = [NSString stringWithFormat:@"%@_%@", kOhrtCaughtUpKey, account];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    id old = [defaults objectForKey:kOhrtCaughtUpKey];
+    if (old && ![defaults objectForKey:key]) {
+        [defaults setObject:old forKey:key];
+        [defaults removeObjectForKey:kOhrtCaughtUpKey];
+    }
+    return key;
+}
+
 static NSTimeInterval OhrtSavedMark(void) {
-    NSTimeInterval saved = [[NSUserDefaults standardUserDefaults] doubleForKey:kOhrtCaughtUpKey];
+    NSTimeInterval saved = [[NSUserDefaults standardUserDefaults] doubleForKey:OhrtWallKeyNow()];
     return OhrtWallMark(saved, [NSDate date].timeIntervalSince1970, kOhrtFirstWindow);
+}
+
+static NSString *gCutoffAccount;
+
+static NSTimeInterval OhrtWallCutoff(void) {
+    NSString *account = OhrtWallAccount();
+    if (account != gCutoffAccount && ![account isEqual:gCutoffAccount]) {
+        gCutoffAccount = [account copy];
+        gCutoff = OhrtSavedMark();
+    }
+    return gCutoff;
 }
 
 #pragma mark - Room for the wall at the end of the list
@@ -188,8 +218,9 @@ static void OhrtSetExtraHeight(UICollectionView *list, CGFloat height) {
     CGFloat visibleBottom = list.contentOffset.y + list.bounds.size.height - list.adjustedContentInset.bottom;
     if (visibleBottom < CGRectGetMidY(frame)) return;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    if (self.newest <= [defaults doubleForKey:kOhrtCaughtUpKey]) return;
-    [defaults setDouble:self.newest forKey:kOhrtCaughtUpKey];
+    NSString *key = OhrtWallKeyNow();
+    if (self.newest <= [defaults doubleForKey:key]) return;
+    [defaults setDouble:self.newest forKey:key];
     OhrtLog(@"wall: reached, caught up to posts of %@", [NSDate dateWithTimeIntervalSince1970:self.newest]);
 }
 
@@ -288,7 +319,7 @@ static NSArray *OhrtCutAtWall(NSArray *objects, NSTimeInterval *newest, BOOL *cu
         return objects;
     }
     double newestKept = 0;
-    size_t keep = OhrtWallKeep(items, count, gCutoff, &newestKept);
+    size_t keep = OhrtWallKeep(items, count, OhrtWallCutoff(), &newestKept);
     free(items);
     *newest = newestKept;
     if (keep >= count) return objects;
@@ -377,7 +408,7 @@ static void OhrtStartWall(void) {
     [center addObserverForName:UIApplicationWillEnterForegroundNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         if (gWentAway <= 0 || [NSDate date].timeIntervalSince1970 - gWentAway < kOhrtNewVisitAfter) return;
         NSTimeInterval mark = OhrtSavedMark();
-        if (mark <= gCutoff) return;
+        if (mark <= OhrtWallCutoff()) return;
         gCutoff = mark;
         id adapter = gAdapter;
         SEL update = NSSelectorFromString(@"performUpdatesAnimated:completion:");
