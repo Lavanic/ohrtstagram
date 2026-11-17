@@ -10,6 +10,11 @@
 //  - the accounts with the highest bestie_coefficient, the score its servers
 //    give each account you might want to reach.
 // A value Instagram left at -1 is one it did not fill, and is left out.
+//
+// The screen is drawn as a terminal program would draw it: one size of
+// monospaced type on a grid of 56 columns, boxes with their titles in the
+// border, and meters made of dots, in the colours of Oliver's btop theme.
+// Nothing else in the app is styled this way.
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -62,138 +67,300 @@ static NSString *OhrtAboutRate(id value) {
 static NSString *OhrtAboutGender(id value) {
     NSDictionary<NSNumber *, NSString *> *names = @{@1 : @"male", @2 : @"female", @3 : @"prefer not to say", @4 : @"custom"};
     NSString *name = [value isKindOfClass:[NSNumber class]] ? names[@([value integerValue])] : nil;
-    return name ? [NSString stringWithFormat:@"%@ (%@)", name, value] : OhrtAboutNumber(value);
+    return name ?: OhrtAboutNumber(value);
+}
+
+static NSString *OhrtAboutYesNo(id value) {
+    return [value isKindOfClass:[NSNumber class]] ? ([value boolValue] ? @"yes" : @"no") : OhrtAboutNumber(value);
+}
+
+static NSString *OhrtAboutOf28(id value) {
+    return [OhrtAboutNumber(value) stringByAppendingString:@"/28"];
 }
 
 typedef NSString * (*OhrtAboutFormat)(id);
 
+enum {
+    kOhrtAboutBack = 0x11111b,
+    kOhrtAboutBorder = 0x5a5a5a,
+    kOhrtAboutDim = 0x6c6c6c,
+    kOhrtAboutText = 0xbcbcbc,
+    kOhrtAboutWhite = 0xffffff,
+    kOhrtAboutIndex = 0xf05050,
+    kOhrtAboutQuietRed = 0xd9626d,
+    kOhrtAboutName = 0x77ca9b,
+    kOhrtAboutOff = 0x2d2d3a,
+    kOhrtAboutDivide = 0x333340,
+};
+
+typedef NS_ENUM(NSInteger, OhrtAboutKind) {
+    OhrtAboutKindLine,
+    OhrtAboutKindGrid,
+    OhrtAboutKindRates,
+    OhrtAboutKindRanked,
+    OhrtAboutKindRaw,
+};
+
+static UIColor *OhrtAboutHex(uint32_t hex) {
+    return [UIColor colorWithRed:((hex >> 16) & 255) / 255.0 green:((hex >> 8) & 255) / 255.0 blue:(hex & 255) / 255.0 alpha:1];
+}
+
+static uint32_t OhrtAboutMix(uint32_t one, uint32_t other, double part) {
+    uint32_t mixed = 0;
+    for (int shift = 16; shift >= 0; shift -= 8) {
+        double from = (one >> shift) & 255, to = (other >> shift) & 255;
+        mixed |= (uint32_t)lround(from + (to - from) * part) << shift;
+    }
+    return mixed;
+}
+
+static NSString *OhrtAboutFit(NSString *text, NSInteger width) {
+    if (width < 1) return @"";
+    if ((NSInteger)text.length <= width) return text;
+    return [[text substringToIndex:width - 1] stringByAppendingString:@"…"];
+}
+
 @interface OhrtAboutRow : NSObject
 @property (nonatomic, copy) NSString *label, *value, *about;
-// A row of three figures side by side, as {figure, what it is} pairs.
-@property (nonatomic, copy) NSArray<NSArray<NSString *> *> *tiles;
-// The one figure the screen leads with.
-@property (nonatomic) BOOL hero;
+// For a meter: how much of it is lit, from 0 to 1.
+@property (nonatomic) double part;
 @end
 
 @implementation OhrtAboutRow
 @end
 
-static UIImageView *OhrtAboutMark(void) {
-    UIImageView *mark = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"questionmark.circle"]];
-    mark.tintColor = [UIColor tertiaryLabelColor];
-    mark.frame = CGRectMake(0, 0, 20, 20);
-    mark.contentMode = UIViewContentModeScaleAspectFit;
-    return mark;
-}
-
-@interface OhrtAboutHeroCell : UITableViewCell
-@property (nonatomic, strong) UILabel *figure, *caption;
+@interface OhrtAboutBox : NSObject
+@property (nonatomic) OhrtAboutKind kind;
+// `note` sits at the right of the top border, `foot` at the right of the
+// bottom one, and `under` is a dim line below the rows.
+@property (nonatomic, copy) NSString *title, *note, *foot, *under;
+@property (nonatomic, copy) NSArray<OhrtAboutRow *> *rows;
 @end
 
-@implementation OhrtAboutHeroCell
-
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)identifier {
-    if ((self = [super initWithStyle:style reuseIdentifier:identifier])) {
-        _caption = [UILabel new];
-        _caption.font = [UIFont systemFontOfSize:13];
-        _caption.textColor = [UIColor secondaryLabelColor];
-        _figure = [UILabel new];
-        _figure.font = [UIFont monospacedDigitSystemFontOfSize:38 weight:UIFontWeightBold];
-        _figure.textColor = OhrtFactsLineColour();
-        _figure.adjustsFontSizeToFitWidth = YES;
-        _figure.minimumScaleFactor = 0.6;
-        UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[ _caption, _figure ]];
-        stack.axis = UILayoutConstraintAxisVertical;
-        stack.spacing = 2;
-        stack.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:stack];
-        UIImageView *mark = OhrtAboutMark();
-        mark.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:mark];
-        [NSLayoutConstraint activateConstraints:@[
-            [stack.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:14],
-            [stack.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-14],
-            [stack.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-            [stack.trailingAnchor constraintLessThanOrEqualToAnchor:mark.leadingAnchor constant:-8],
-            [mark.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-            [mark.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-            [mark.widthAnchor constraintEqualToConstant:20],
-            [mark.heightAnchor constraintEqualToConstant:20],
-        ]];
-    }
-    return self;
-}
-
+@implementation OhrtAboutBox
 @end
 
-@interface OhrtAboutTilesCell : UITableViewCell
-@property (nonatomic, strong) UIStackView *row;
+static const NSInteger kOhrtAboutColumns = 56;
+static const CGFloat kOhrtAboutSide = 5, kOhrtAboutTop = 8;
+
+@interface OhrtAboutPage : UIView
+@property (nonatomic, copy) NSArray<OhrtAboutBox *> *boxes;
+@property (nonatomic, copy) void (^tapped)(OhrtAboutRow *row);
 @end
 
-@implementation OhrtAboutTilesCell
-
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)identifier {
-    if ((self = [super initWithStyle:style reuseIdentifier:identifier])) {
-        self.backgroundColor = [UIColor clearColor];
-        self.selectionStyle = UITableViewCellSelectionStyleNone;
-        _row = [UIStackView new];
-        _row.axis = UILayoutConstraintAxisHorizontal;
-        _row.distribution = UIStackViewDistributionFillEqually;
-        _row.spacing = 8;
-        _row.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:_row];
-        [NSLayoutConstraint activateConstraints:@[
-            [_row.topAnchor constraintEqualToAnchor:self.contentView.topAnchor],
-            [_row.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
-            [_row.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
-            [_row.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
-        ]];
-    }
-    return self;
+@implementation OhrtAboutPage {
+    CGFloat _cw, _ch;
+    UIFont *_plain, *_bold;
+    NSMutableArray<NSArray *> *_hits;
 }
 
-- (void)show:(NSArray<NSArray<NSString *> *> *)tiles {
-    for (UIView *old in self.row.arrangedSubviews) [old removeFromSuperview];
-    for (NSArray<NSString *> *tile in tiles) {
-        UILabel *figure = [UILabel new];
-        figure.text = tile[0];
-        figure.font = [UIFont monospacedDigitSystemFontOfSize:22 weight:UIFontWeightBold];
-        figure.textColor = OhrtFactsLineColour();
-        figure.adjustsFontSizeToFitWidth = YES;
-        figure.minimumScaleFactor = 0.5;
-        UILabel *what = [UILabel new];
-        what.text = tile[1];
-        what.font = [UIFont systemFontOfSize:11];
-        what.textColor = [UIColor secondaryLabelColor];
-        what.numberOfLines = 2;
-        UIStackView *box = [[UIStackView alloc] initWithArrangedSubviews:@[ figure, what ]];
-        box.axis = UILayoutConstraintAxisVertical;
-        box.spacing = 2;
-        box.layoutMargins = UIEdgeInsetsMake(12, 12, 12, 12);
-        box.layoutMarginsRelativeArrangement = YES;
-        UIView *card = [UIView new];
-        card.backgroundColor = [UIColor secondarySystemBackgroundColor];
-        card.layer.cornerRadius = 14;
-        box.translatesAutoresizingMaskIntoConstraints = NO;
-        [card addSubview:box];
-        [NSLayoutConstraint activateConstraints:@[
-            [box.topAnchor constraintEqualToAnchor:card.topAnchor],
-            [box.bottomAnchor constraintEqualToAnchor:card.bottomAnchor],
-            [box.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
-            [box.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
-        ]];
-        [self.row addArrangedSubview:card];
+static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
+    UIFont *probe = [UIFont monospacedSystemFontOfSize:100 weight:weight];
+    CGFloat wide = [@"0" sizeWithAttributes:@{NSFontAttributeName : probe}].width;
+    return [UIFont monospacedSystemFontOfSize:wide > 0 ? 100 * advance / wide : 11 weight:weight];
+}
+
+- (void)measure:(CGFloat)width {
+    CGFloat cw = (width - 2 * kOhrtAboutSide) / kOhrtAboutColumns;
+    if (cw == _cw && _plain) return;
+    _cw = cw;
+    CGFloat scale = [UIScreen mainScreen].scale;
+    _ch = round(cw * 17 / 7 * scale) / scale;
+    _plain = OhrtAboutFont(cw, UIFontWeightRegular);
+    _bold = OhrtAboutFont(cw, UIFontWeightBold);
+}
+
+- (NSInteger)linesIn:(OhrtAboutBox *)box {
+    if (box.kind == OhrtAboutKindGrid) return (box.rows.count + 1) / 2;
+    return box.rows.count + (box.under.length ? 1 : 0);
+}
+
+- (CGFloat)heightForWidth:(CGFloat)width {
+    [self measure:width];
+    NSInteger lines = 2;
+    for (OhrtAboutBox *box in self.boxes) lines += [self linesIn:box] + 2;
+    return kOhrtAboutTop + lines * _ch + 12;
+}
+
+- (CGFloat)x:(NSInteger)column {
+    return kOhrtAboutSide + column * _cw;
+}
+
+- (CGFloat)y:(NSInteger)row {
+    return kOhrtAboutTop + row * _ch;
+}
+
+- (void)put:(NSString *)text row:(NSInteger)row column:(NSInteger)column colour:(uint32_t)colour bold:(BOOL)bold {
+    if (!text.length) return;
+    UIFont *font = bold ? _bold : _plain;
+    [text drawAtPoint:CGPointMake([self x:column], [self y:row] + (_ch - font.lineHeight) / 2) withAttributes:@{NSFontAttributeName : font, NSForegroundColorAttributeName : OhrtAboutHex(colour)}];
+}
+
+// Text that ends just before `end`.
+- (void)put:(NSString *)text row:(NSInteger)row end:(NSInteger)end colour:(uint32_t)colour bold:(BOOL)bold {
+    [self put:text row:row column:end - (NSInteger)text.length colour:colour bold:bold];
+}
+
+// A label at `column` and its value ending before `column + width`.
+- (void)pair:(OhrtAboutRow *)item row:(NSInteger)row column:(NSInteger)column width:(NSInteger)width label:(uint32_t)label value:(uint32_t)colour bold:(BOOL)bold {
+    NSString *value = OhrtAboutFit([item.value stringByReplacingOccurrencesOfString:@"_" withString:@" "], width - 4);
+    [self put:OhrtAboutFit(item.label, width - (NSInteger)value.length - 1) row:row column:column colour:label bold:NO];
+    [self put:value row:row end:column + width colour:colour bold:bold];
+}
+
+// btop's meters are braille: each cell is two columns of four dots. They
+// are drawn as dots here, since the phone's monospaced face borrows its
+// braille from another one of a different width.
+- (void)meter:(double)part row:(NSInteger)row column:(NSInteger)column cells:(NSInteger)cells colours:(const uint32_t *)stops count:(int)count {
+    NSInteger total = cells * 2, lit = MAX(1, (NSInteger)lround(MIN(1, MAX(0, part)) * total));
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    CGFloat radius = _cw * 0.15;
+    for (NSInteger dot = 0; dot < total; dot++) {
+        uint32_t colour = kOhrtAboutOff;
+        if (dot < lit) {
+            double along = total > 1 ? (double)dot / (total - 1) : 0;
+            if (count == 1) colour = stops[0];
+            else colour = along < 0.5 ? OhrtAboutMix(stops[0], stops[1], along * 2) : OhrtAboutMix(stops[1], stops[2], (along - 0.5) * 2);
+        }
+        CGContextSetFillColorWithColor(context, OhrtAboutHex(colour).CGColor);
+        CGFloat x = [self x:column + dot / 2] + _cw * (dot % 2 ? 0.75 : 0.25);
+        for (int down = 0; down < 4; down++) {
+            CGFloat y = [self y:row] + _ch * (0.2 + 0.2 * down);
+            CGContextFillEllipseInRect(context, CGRectMake(x - radius, y - radius, radius * 2, radius * 2));
+        }
     }
 }
 
+- (void)frame:(OhrtAboutBox *)box index:(NSUInteger)index from:(NSInteger)first to:(NSInteger)last {
+    CGFloat left = [self x:0] + _cw / 2, right = [self x:kOhrtAboutColumns - 1] + _cw / 2;
+    CGFloat top = [self y:first] + _ch / 2, bottom = [self y:last] + _ch / 2, round = 4;
+    UIBezierPath *path = [UIBezierPath bezierPath];
+    path.lineWidth = 1;
+    for (int side = 0; side < 2; side++) {
+        CGFloat x = side ? right : left, inward = side ? -round : round;
+        [path moveToPoint:CGPointMake(x + inward, top)];
+        [path addQuadCurveToPoint:CGPointMake(x, top + round) controlPoint:CGPointMake(x, top)];
+        [path addLineToPoint:CGPointMake(x, bottom - round)];
+        [path addQuadCurveToPoint:CGPointMake(x + inward, bottom) controlPoint:CGPointMake(x, bottom)];
+    }
+    NSString *title = [NSString stringWithFormat:@"%lu%@", (unsigned long)index, box.title];
+    NSInteger noteAt = kOhrtAboutColumns - 2 - (NSInteger)box.note.length, footAt = kOhrtAboutColumns - 2 - (NSInteger)box.foot.length;
+    // The top line, broken where the title and the note are written into it.
+    CGFloat x = left + round;
+    [path moveToPoint:CGPointMake(x, top)];
+    [path addLineToPoint:CGPointMake([self x:2] - 1, top)];
+    x = [self x:2 + (NSInteger)title.length] + 1;
+    if (box.note.length) {
+        [path moveToPoint:CGPointMake(x, top)];
+        [path addLineToPoint:CGPointMake([self x:noteAt] - 1, top)];
+        x = [self x:kOhrtAboutColumns - 2] + 1;
+    }
+    [path moveToPoint:CGPointMake(x, top)];
+    [path addLineToPoint:CGPointMake(right - round, top)];
+    x = left + round;
+    if (box.foot.length) {
+        [path moveToPoint:CGPointMake(x, bottom)];
+        [path addLineToPoint:CGPointMake([self x:footAt] - 1, bottom)];
+        x = [self x:kOhrtAboutColumns - 2] + 1;
+    }
+    [path moveToPoint:CGPointMake(x, bottom)];
+    [path addLineToPoint:CGPointMake(right - round, bottom)];
+    [OhrtAboutHex(kOhrtAboutBorder) setStroke];
+    [path stroke];
+    [self put:[title substringToIndex:title.length - box.title.length] row:first column:2 colour:kOhrtAboutIndex bold:YES];
+    [self put:box.title row:first column:2 + (NSInteger)(title.length - box.title.length) colour:kOhrtAboutWhite bold:YES];
+    [self put:box.note row:first column:noteAt colour:kOhrtAboutDim bold:NO];
+    [self put:box.foot row:last column:footAt colour:kOhrtAboutDim bold:NO];
+}
+
+- (void)hit:(OhrtAboutRow *)item row:(NSInteger)row column:(NSInteger)column width:(NSInteger)width {
+    if (!item.about.length) return;
+    [_hits addObject:@[ [NSValue valueWithCGRect:CGRectMake([self x:column], [self y:row], width * _cw, _ch)], item ]];
+}
+
+- (void)drawRect:(CGRect)rect {
+    [self measure:self.bounds.size.width];
+    _hits = [NSMutableArray array];
+    const NSInteger columns = kOhrtAboutColumns, inner = columns - 4, middle = columns / 2;
+    [self put:@"hidden account data" row:0 column:1 colour:kOhrtAboutWhite bold:YES];
+    [self put:[@"ohrtstagram " stringByAppendingString:OHRT_VERSION] row:0 end:columns - 1 colour:kOhrtAboutDim bold:NO];
+    static const uint32_t rates[] = {0xf05050, 0xff40b6, 0x4897d4, 0x50f095, 0xf0c050};
+    static const uint32_t close[] = {0x4897d4, 0x8080ff, 0xff40b6};
+    NSInteger row = 2;
+    NSUInteger index = 0;
+    for (OhrtAboutBox *box in self.boxes) {
+        NSInteger lines = [self linesIn:box];
+        [self frame:box index:++index from:row to:row + lines + 1];
+        NSInteger at = row + 1;
+        for (NSUInteger place = 0; place < box.rows.count; place++) {
+            OhrtAboutRow *item = box.rows[place];
+            switch (box.kind) {
+                case OhrtAboutKindLine:
+                    [self pair:item row:at column:2 width:inner label:kOhrtAboutText value:kOhrtAboutQuietRed bold:YES];
+                    [self hit:item row:at column:1 width:columns - 2];
+                    at++;
+                    break;
+                case OhrtAboutKindGrid: {
+                    BOOL second = place % 2;
+                    NSInteger line = at + place / 2;
+                    [self pair:item row:line column:second ? middle + 1 : 2 width:second ? columns - middle - 3 : middle - 4 label:kOhrtAboutText value:kOhrtAboutWhite bold:YES];
+                    [self hit:item row:line column:second ? middle : 1 width:middle - 1];
+                    break;
+                }
+                case OhrtAboutKindRates:
+                    [self put:OhrtAboutFit(item.label, 24) row:at column:2 colour:kOhrtAboutText bold:NO];
+                    [self meter:item.part row:at column:27 cells:20 colours:&rates[place % 5] count:1];
+                    [self put:item.value row:at end:columns - 2 colour:kOhrtAboutWhite bold:YES];
+                    [self hit:item row:at column:1 width:columns - 2];
+                    at++;
+                    break;
+                case OhrtAboutKindRanked:
+                    [self put:[NSString stringWithFormat:@"%2lu", (unsigned long)place + 1] row:at column:2 colour:kOhrtAboutDim bold:NO];
+                    [self put:OhrtAboutFit(item.label, 18) row:at column:5 colour:kOhrtAboutName bold:NO];
+                    [self meter:item.part row:at column:24 cells:25 colours:close count:3];
+                    [self put:item.value row:at end:columns - 2 colour:kOhrtAboutWhite bold:YES];
+                    [self hit:item row:at column:1 width:columns - 2];
+                    at++;
+                    break;
+                case OhrtAboutKindRaw:
+                    [self pair:item row:at column:2 width:inner label:kOhrtAboutDim value:kOhrtAboutText bold:NO];
+                    [self hit:item row:at column:1 width:columns - 2];
+                    at++;
+                    break;
+            }
+        }
+        if (box.kind == OhrtAboutKindGrid) {
+            UIBezierPath *divide = [UIBezierPath bezierPath];
+            [divide moveToPoint:CGPointMake([self x:middle] - _cw / 2, [self y:row + 1] + 3)];
+            [divide addLineToPoint:CGPointMake([self x:middle] - _cw / 2, [self y:row + lines + 1] - 3)];
+            [OhrtAboutHex(kOhrtAboutDivide) setStroke];
+            [divide stroke];
+        } else if (box.under.length) {
+            [self put:OhrtAboutFit(box.under, inner) row:at column:2 colour:kOhrtAboutDim bold:NO];
+            if (box.rows.count) [self hit:box.rows[0] row:at column:1 width:columns - 2];
+        }
+        row += lines + 2;
+    }
+}
+
+- (void)touched:(UITapGestureRecognizer *)tap {
+    CGPoint point = [tap locationInView:self];
+    for (NSArray *hit in _hits) {
+        if (!CGRectContainsPoint([hit[0] CGRectValue], point)) continue;
+        if (self.tapped) self.tapped(hit[1]);
+        return;
+    }
+}
+
 @end
 
-@interface OhrtAboutViewController : UIViewController <UITableViewDataSource, UITableViewDelegate>
-@property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) NSArray<NSString *> *titles, *notes;
-@property (nonatomic, strong) NSArray<NSArray<OhrtAboutRow *> *> *rows;
+@interface OhrtAboutViewController : UIViewController
+@property (nonatomic, strong) UIScrollView *scroll;
+@property (nonatomic, strong) OhrtAboutPage *page;
+@property (nonatomic, strong) UIImageView *backdrop;
+@property (nonatomic, strong) UIView *panel;
 @property (nonatomic, copy) NSString *nextOpen;
-@property (nonatomic, strong) NSLayoutConstraint *top;
+@property (nonatomic) CGFloat bottomRoom;
 @end
 
 @implementation OhrtAboutViewController
@@ -209,56 +376,62 @@ static UIImageView *OhrtAboutMark(void) {
     return room;
 }
 
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
-    CGFloat room = [self topRoom];
-    if (self.top.constant != room) self.top.constant = room;
-}
-
-- (void)setBottomRoom:(CGFloat)room {
-    [self loadViewIfNeeded];
-    self.tableView.contentInset = UIEdgeInsetsMake(0, 0, room, 0);
-    self.tableView.verticalScrollIndicatorInsets = UIEdgeInsetsMake(0, 0, room, 0);
-}
-
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
-    self.tableView.dataSource = self;
-    self.tableView.delegate = self;
-    self.tableView.backgroundColor = [UIColor systemBackgroundColor];
-    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.tableView];
-    self.tableView.rowHeight = UITableViewAutomaticDimension;
-    self.tableView.estimatedRowHeight = 44;
-    self.tableView.sectionHeaderTopPadding = 18;
-    self.top = [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:[self topRoom]];
-    [NSLayoutConstraint activateConstraints:@[
-        self.top,
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-    ]];
+    self.view.backgroundColor = OhrtAboutHex(kOhrtAboutBack);
+    self.scroll = [UIScrollView new];
+    self.scroll.alwaysBounceVertical = YES;
+    self.scroll.indicatorStyle = UIScrollViewIndicatorStyleWhite;
+    self.scroll.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    [self.view addSubview:self.scroll];
 
-    UILabel *title = [UILabel new];
-    title.text = @"hidden account data";
-    title.font = [UIFont systemFontOfSize:28 weight:UIFontWeightBold];
-    UILabel *under = [UILabel new];
-    under.text = @"What Insta\u2060gram keeps about you on this phone and never shows you. Tap anything to see what it means.";
-    under.font = [UIFont systemFontOfSize:13];
-    under.textColor = [UIColor secondaryLabelColor];
-    under.numberOfLines = 0;
-    UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[ title, under ]];
-    stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 4;
-    stack.layoutMargins = UIEdgeInsetsMake(8, 20, 0, 20);
-    stack.layoutMarginsRelativeArrangement = YES;
-    CGFloat width = [UIScreen mainScreen].bounds.size.width;
-    CGSize fit = [stack systemLayoutSizeFittingSize:CGSizeMake(width, 0) withHorizontalFittingPriority:UILayoutPriorityRequired verticalFittingPriority:UILayoutPriorityFittingSizeLevel];
-    stack.frame = CGRectMake(0, 0, width, fit.height);
-    self.tableView.tableHeaderView = stack;
+    // The picture behind the top of the page, as faint as a terminal at
+    // 0.95 opacity leaves its wallpaper, fading out towards its lower edge.
+    NSString *file = [[NSBundle mainBundle] pathForResource:@"OhrtBackdrop" ofType:@"jpg"];
+    UIImage *picture = file ? [UIImage imageWithContentsOfFile:file] : nil;
+    if (picture) {
+        self.backdrop = [[UIImageView alloc] initWithImage:picture];
+        self.backdrop.contentMode = UIViewContentModeScaleAspectFill;
+        self.backdrop.clipsToBounds = YES;
+        self.backdrop.alpha = 0.05;
+        CAGradientLayer *fade = [CAGradientLayer layer];
+        fade.colors = @[ (id)[UIColor whiteColor].CGColor, (id)[UIColor whiteColor].CGColor, (id)[UIColor clearColor].CGColor ];
+        fade.locations = @[ @0, @0.55, @1 ];
+        self.backdrop.layer.mask = fade;
+        [self.scroll addSubview:self.backdrop];
+    }
+
+    self.page = [OhrtAboutPage new];
+    self.page.opaque = NO;
+    self.page.backgroundColor = [UIColor clearColor];
+    self.page.contentMode = UIViewContentModeRedraw;
+    [self.page addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self.page action:@selector(touched:)]];
+    __weak OhrtAboutViewController *weakSelf = self;
+    self.page.tapped = ^(OhrtAboutRow *row) {
+        [weakSelf explain:row];
+    };
+    [self.scroll addSubview:self.page];
     [self refresh];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    CGSize size = self.view.bounds.size;
+    CGFloat top = [self topRoom];
+    CGRect frame = CGRectMake(0, top, size.width, size.height - top);
+    if (!CGRectEqualToRect(self.scroll.frame, frame)) self.scroll.frame = frame;
+    self.scroll.contentInset = UIEdgeInsetsMake(0, 0, self.bottomRoom, 0);
+    CGRect page = CGRectMake(0, 0, size.width, [self.page heightForWidth:size.width]);
+    if (!CGRectEqualToRect(self.page.frame, page)) self.page.frame = page;
+    self.scroll.contentSize = page.size;
+    if (self.backdrop.image.size.width > 0) {
+        CGRect behind = CGRectMake(0, 0, size.width, size.width * self.backdrop.image.size.height / self.backdrop.image.size.width);
+        if (!CGRectEqualToRect(self.backdrop.frame, behind)) {
+            self.backdrop.frame = behind;
+            self.backdrop.layer.mask.frame = self.backdrop.bounds;
+        }
+    }
+    self.panel.frame = self.view.bounds;
 }
 
 // Instagram's tab bar controller does not pass "will appear" on to a screen
@@ -268,8 +441,7 @@ static UIImageView *OhrtAboutMark(void) {
         [self build];
         [self askNextOpen];
     });
-    [self.tableView reloadData];
-    OhrtLog(@"about: %lu sections shown", (unsigned long)self.rows.count);
+    OhrtLog(@"about: %lu boxes shown", (unsigned long)self.page.boxes.count);
 }
 
 static OhrtAboutRow *OhrtAboutPlain(NSString *label, NSString *value, NSString *about) {
@@ -280,14 +452,25 @@ static OhrtAboutRow *OhrtAboutPlain(NSString *label, NSString *value, NSString *
     return row;
 }
 
+static OhrtAboutBox *OhrtAboutBoxed(OhrtAboutKind kind, NSString *title, NSString *note, NSArray<OhrtAboutRow *> *rows) {
+    OhrtAboutBox *box = [OhrtAboutBox new];
+    box.kind = kind;
+    box.title = title;
+    box.note = note;
+    box.rows = rows;
+    return box;
+}
+
 static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *features, NSString *label, NSString *key, OhrtAboutFormat format, NSString *about) {
     id value = features[key];
     if (!OhrtAboutFilled(value)) return;
     NSString *named = [NSString stringWithFormat:@"%@\n\nInsta\u2060gram's name for it: %@", about, key];
-    [rows addObject:OhrtAboutPlain(label, format ? format(value) : OhrtAboutNumber(value), named)];
+    OhrtAboutRow *row = OhrtAboutPlain(label, format ? format(value) : OhrtAboutNumber(value), named);
+    if (format == OhrtAboutRate) row.part = [value doubleValue];
+    [rows addObject:row];
 }
 
-- (NSArray<OhrtAboutRow *> *)besties {
+- (NSArray<OhrtAboutRow *> *)besties:(NSUInteger *)total {
     id service = OhrtCall(OhrtCurrentSession(), @"userBootstrapService");
     id bootstrap = OhrtAboutIvar(service, "_bootstrap");
     id surfaces = OhrtCallValue(bootstrap, @"surfaces");
@@ -318,80 +501,77 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
         id score = scores[key];
         if (![score isKindOfClass:[NSNumber class]]) continue;
         NSString *name = names[[key description]];
-        [rows addObject:OhrtAboutPlain([NSString stringWithFormat:@"%lu. %@", (unsigned long)rows.count + 1, name ? [@"@" stringByAppendingString:name] : [@"id " stringByAppendingString:[key description]]],
-                                       [NSString stringWithFormat:@"%.0f/100", [score doubleValue] * 100], about)];
+        OhrtAboutRow *row = OhrtAboutPlain(name ? [@"@" stringByAppendingString:name] : [@"id " stringByAppendingString:[key description]], [NSString stringWithFormat:@"%.0f", [score doubleValue] * 100], about);
+        row.part = [score doubleValue];
+        [rows addObject:row];
     }
+    if (total) *total = scores.count;
     return rows;
 }
 
 - (void)build {
     NSDate *when = nil;
     NSDictionary *f = OhrtAboutFeatures(&when);
-    NSMutableArray<NSString *> *titles = [NSMutableArray array], *notes = [NSMutableArray array];
-    NSMutableArray<NSArray<OhrtAboutRow *> *> *sections = [NSMutableArray array];
-    void (^section)(NSString *, NSString *, NSArray<OhrtAboutRow *> *) = ^(NSString *title, NSString *note, NSArray<OhrtAboutRow *> *rows) {
-        if (!rows.count) return;
-        [titles addObject:title];
-        [notes addObject:note];
-        [sections addObject:rows];
-    };
+    NSMutableArray<OhrtAboutBox *> *boxes = [NSMutableArray array];
 
-    OhrtAboutRow *tiles = [OhrtAboutRow new];
-    NSMutableArray<NSArray<NSString *> *> *figures = [NSMutableArray array];
-    if (OhrtAboutFilled(f[@"user_predicted_age"])) [figures addObject:@[ OhrtAboutNumber(f[@"user_predicted_age"]), @"predicted age" ]];
-    if (OhrtAboutFilled(f[@"user_timespent_28d_sec"])) [figures addObject:@[ [NSString stringWithFormat:@"%lldh", [f[@"user_timespent_28d_sec"] longLongValue] / 3600], @"in the app, 28 days" ]];
-    if (OhrtAboutFilled(f[@"core_foreground_session_count_l7"])) [figures addObject:@[ OhrtAboutNumber(f[@"core_foreground_session_count_l7"]), @"opens, 7 days" ]];
-    tiles.tiles = figures;
+    OhrtAboutBox *next = OhrtAboutBoxed(OhrtAboutKindLine, @"next open", @"casper, a model on this phone", @[ OhrtAboutPlain(@"instagram expects you to reopen the app in", self.nextOpen ?: @"asking",
+                              @"Insta⁠gram's guess at how long until you next open the app. The model runs on your phone and looks at how often you opened the app over the last hour up to the "
+                              @"last week, how long you stayed, the time of day, your unread messages and where you were when you last left. Insta⁠gram uses the guess to decide when to "
+                              @"fetch new posts in the background.\n\nInsta⁠gram's name for it: IGCasper, minutes_to_next_target_event") ]);
+    next.under = @"worked out from when and how often you open it";
+    [boxes addObject:next];
 
-    OhrtAboutRow *hero = OhrtAboutPlain(@"instagram expects you back", self.nextOpen ?: @"asking\u2026",
-                              @"Insta\u2060gram's guess at how long until you next open the app. The model runs on your phone and looks at how often you opened the app over the last hour up to the "
-                              @"last week, how long you stayed, the time of day, your unread messages and where you were when you last left. Insta\u2060gram uses the guess to decide when to "
-                              @"fetch new posts in the background.\n\nInsta\u2060gram's name for it: IGCasper, minutes_to_next_target_event");
-    hero.hero = YES;
-    section(@"", @"A model on your phone, called Casper in Insta\u2060gram's code, guesses when you will next open the app, so that it can load things before you do.", @[ hero ]);
-    if (figures.count == 3) section(@"", @"", @[ tiles ]);
-
-    NSString *profile = @"Sent with your home feed about once a day.";
     NSMutableArray<OhrtAboutRow *> *rows = [NSMutableArray array];
     OhrtAboutAdd(rows, f, @"reels group", @"clips_cohort", NULL,
-                 @"The group Insta\u2060gram puts you in for Reels. The names of the groups are chosen on Meta's servers and the others are not in the app, so what ranks exist besides this one is not known.");
+                 @"The group Insta⁠gram puts you in for Reels. The names of the groups are chosen on Meta's servers and the others are not in the app, so what ranks exist besides this one is not known.");
     OhrtAboutAdd(rows, f, @"reels tier", @"reels_user_cohort_segment_based_on_play_v2", NULL,
                  @"A tier based on how much you play reels. The scale is not in the app, so what the number is out of is not known.");
     OhrtAboutAdd(rows, f, @"predicted age", @"user_predicted_age", NULL,
-                 @"The age Insta\u2060gram reckons you are. Meta has said it uses a model that estimates age from things like how old an account is and how it is used. Whether this number is that model's "
+                 @"The age Insta⁠gram reckons you are. Meta has said it uses a model that estimates age from things like how old an account is and how it is used. Whether this number is that model's "
                  @"answer is not confirmed.");
     OhrtAboutAdd(rows, f, @"gender", @"gender", OhrtAboutGender,
-                 @"The gender on file for you, in the codes of Insta\u2060gram's own gender setting: 1 male, 2 female, 3 prefer not to say, 4 custom. Whether it copies what you set or is predicted cannot be "
+                 @"The gender on file for you, in the codes of Insta⁠gram's own gender setting: 1 male, 2 female, 3 prefer not to say, 4 custom. Whether it copies what you set or is predicted cannot be "
                  @"told from the app.");
-    OhrtAboutAdd(rows, f, @"teen, by its model", @"user_is_teen_model_based", NULL, @"Whether a model, as opposed to your stated birthday, takes you for a teenager. 0 is no.");
-    OhrtAboutAdd(rows, f, @"days active, of the last 28", @"user_l28_ig_classic_count", NULL, @"On how many of the last 28 days you used Insta\u2060gram.");
+    OhrtAboutAdd(rows, f, @"teen, by model", @"user_is_teen_model_based", OhrtAboutYesNo, @"Whether a model, as opposed to your stated birthday, takes you for a teenager.");
     OhrtAboutAdd(rows, f, @"notes on offer", @"notes_inventory_bucket", NULL, @"Roughly how many Notes there are to show you, as a range.");
-    section(@"how instagram labels you", profile, rows);
+    if (rows.count) {
+        OhrtAboutBox *labels = OhrtAboutBoxed(OhrtAboutKindGrid, @"labels", @"sent with your feed, daily", rows);
+        if (when) {
+            NSDateFormatter *formatter = [NSDateFormatter new];
+            formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+            formatter.dateFormat = @"MM.dd.yy HH:mm";
+            labels.foot = [@"sent " stringByAppendingString:[formatter stringFromDate:when]];
+        }
+        [boxes addObject:labels];
+    }
 
     rows = [NSMutableArray array];
-    OhrtAboutAdd(rows, f, @"time in the app", @"user_timespent_28d_sec", OhrtAboutTime, @"How long you had Insta\u2060gram open over the last 28 days.");
-    OhrtAboutAdd(rows, f, @"app opens, last 7 days", @"core_foreground_session_count_l7", NULL, @"How many times you brought Insta\u2060gram to the front in the last 7 days.");
-    OhrtAboutAdd(rows, f, @"feed time, one day", @"user_feed_timespent_1d", OhrtAboutTime, @"Time on the home feed in one day.");
-    OhrtAboutAdd(rows, f, @"stories time, one day", @"user_stories_timespent_1d", OhrtAboutTime, @"Time watching stories in one day.");
-    OhrtAboutAdd(rows, f, @"messages sent", @"user_total_sends_28d", NULL, @"Messages you sent in the last 28 days.");
-    OhrtAboutAdd(rows, f, @"messages read", @"user_total_message_reads_28d", NULL, @"Messages you read in the last 28 days.");
-    OhrtAboutAdd(rows, f, @"posts shared by message", @"viewer_d28_direct_reshare_send", NULL, @"Posts you sent to someone in a message in the last 28 days.");
+    OhrtAboutAdd(rows, f, @"time in app", @"user_timespent_28d_sec", OhrtAboutTime, @"How long you had Insta⁠gram open over the last 28 days.");
+    OhrtAboutAdd(rows, f, @"opens, 7d", @"core_foreground_session_count_l7", NULL, @"How many times you brought Insta⁠gram to the front in the last 7 days.");
+    OhrtAboutAdd(rows, f, @"feed, per day", @"user_feed_timespent_1d", OhrtAboutTime, @"Time on the home feed in one day.");
+    OhrtAboutAdd(rows, f, @"stories, per day", @"user_stories_timespent_1d", OhrtAboutTime, @"Time watching stories in one day.");
+    OhrtAboutAdd(rows, f, @"dms sent", @"user_total_sends_28d", NULL, @"Messages you sent in the last 28 days.");
+    OhrtAboutAdd(rows, f, @"dms read", @"user_total_message_reads_28d", NULL, @"Messages you read in the last 28 days.");
+    OhrtAboutAdd(rows, f, @"posts shared", @"viewer_d28_direct_reshare_send", NULL, @"Posts you sent to someone in a message in the last 28 days.");
     OhrtAboutAdd(rows, f, @"reels shown", @"viewer_d28_instagram_clips_organic_impression", NULL, @"Reels put in front of you in the last 28 days, not counting ads.");
-    OhrtAboutAdd(rows, f, @"reels swiped past", @"viewer_d28_instagram_clips_swipe_forward", NULL, @"Times you swiped on to the next reel in the last 28 days.");
-    OhrtAboutAdd(rows, f, @"videos watched to the end", @"viewer_d28_video_complete", NULL, @"Videos you watched all the way through in the last 28 days.");
-    OhrtAboutAdd(rows, f, @"days you opened explore", @"user_explore_l28", NULL, @"On how many of the last 28 days you opened Explore.");
-    OhrtAboutAdd(rows, f, @"stories available to you", @"user_story_inventory_28d", NULL, @"How many stories there were for you to watch in the last 28 days.");
-    section(@"your last 28 days, as instagram counted", profile, rows);
+    OhrtAboutAdd(rows, f, @"reels swiped", @"viewer_d28_instagram_clips_swipe_forward", NULL, @"Times you swiped on to the next reel in the last 28 days.");
+    OhrtAboutAdd(rows, f, @"videos finished", @"viewer_d28_video_complete", NULL, @"Videos you watched all the way through in the last 28 days.");
+    OhrtAboutAdd(rows, f, @"days on explore", @"user_explore_l28", OhrtAboutOf28, @"On how many of the last 28 days you opened Explore.");
+    OhrtAboutAdd(rows, f, @"stories offered", @"user_story_inventory_28d", NULL, @"How many stories there were for you to watch in the last 28 days.");
+    OhrtAboutAdd(rows, f, @"days active", @"user_l28_ig_classic_count", OhrtAboutOf28, @"On how many of the last 28 days you used Insta⁠gram.");
+    if (rows.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindGrid, @"last 28 days", @"as instagram counted", rows)];
 
     rows = [NSMutableArray array];
     OhrtAboutAdd(rows, f, @"posts you like", @"user_feed_connected_like_rate_d28", OhrtAboutRate, @"Of the posts shown to you from people you follow, the share you liked, over 28 days.");
-    OhrtAboutAdd(rows, f, @"posts you tap through to a profile", @"user_feed_connected_profile_tap_rate_d28", OhrtAboutRate, @"The share of those posts where you tapped through to the profile.");
+    OhrtAboutAdd(rows, f, @"profile taps", @"user_feed_connected_profile_tap_rate_d28", OhrtAboutRate, @"The share of those posts where you tapped through to the profile.");
     OhrtAboutAdd(rows, f, @"posts you share", @"user_feed_connected_reshare_rate_d28", OhrtAboutRate, @"The share of those posts you sent to someone.");
-    OhrtAboutAdd(rows, f, @"suggested reels you like", @"user_feed_ifr_reels_like_rate_28d", OhrtAboutRate, @"Of the reels Insta\u2060gram suggested in your feed, the share you liked.");
+    OhrtAboutAdd(rows, f, @"suggested reels liked", @"user_feed_ifr_reels_like_rate_28d", OhrtAboutRate, @"Of the reels Insta⁠gram suggested in your feed, the share you liked.");
     OhrtAboutAdd(rows, f, @"follows that follow back", @"user_reciprocal_follow_rate", OhrtAboutRate, @"Of the accounts you follow, the share that follow you back.");
-    section(@"how often you react", profile, rows);
+    if (rows.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRates, @"rates", @"of what you were shown", rows)];
 
-    section(@"who instagram thinks you're closest to", @"Your highest bestie_coefficient scores. Meta's servers work them out and send them to your phone.", [self besties]);
+    NSUInteger scored = 0;
+    NSArray<OhrtAboutRow *> *closest = [self besties:&scored];
+    if (closest.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRanked, @"bestie_coefficient", [@"top of " stringByAppendingString:OhrtGrouped((long long)scored)], closest)];
 
     // Everything else it filled, under its own names.
     NSMutableSet<NSString *> *shown = [NSMutableSet setWithArray:@[
@@ -401,31 +581,23 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
         @"user_story_inventory_28d", @"user_feed_connected_like_rate_d28", @"user_feed_connected_profile_tap_rate_d28", @"user_feed_connected_reshare_rate_d28", @"user_feed_ifr_reels_like_rate_28d",
         @"user_reciprocal_follow_rate"
     ]];
-    NSString *raw = @"One of the values Insta\u2060gram stores about you, under the name Meta gave it. In those names l7 and l28 mean the last 7 and 28 days, d28 and d84 a total over that many days, clips "
+    NSString *raw = @"One of the values Insta⁠gram stores about you, under the name Meta gave it. In those names l7 and l28 mean the last 7 and 28 days, d28 and d84 a total over that many days, clips "
                     @"means Reels, connected means from people you follow, and organic means not an ad.";
     rows = [NSMutableArray array];
-    NSUInteger unfilled = 0;
     for (NSString *key in [[f allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
-        if (![key isKindOfClass:[NSString class]] || [shown containsObject:key]) continue;
-        if (!OhrtAboutFilled(f[key])) {
-            unfilled++;
-            continue;
-        }
+        if (![key isKindOfClass:[NSString class]] || [shown containsObject:key] || !OhrtAboutFilled(f[key])) continue;
         [rows addObject:OhrtAboutPlain(key, OhrtAboutNumber(f[key]), raw)];
     }
-    NSString *rest = unfilled ? [NSString stringWithFormat:@"In Meta's own names. %lu more were left unfilled.", (unsigned long)unfilled] : @"In Meta's own names.";
-    if (when) {
-        NSDateFormatter *formatter = [NSDateFormatter new];
-        formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
-        formatter.dateFormat = @"MM.dd.yy HH:mm";
-        rest = [rest stringByAppendingFormat:@" Last sent %@.", [formatter stringFromDate:when]];
-    }
-    section(@"everything else it stores", rest, rows);
+    if (rows.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRaw, @"raw", [NSString stringWithFormat:@"%lu values, meta's names", (unsigned long)rows.count], rows)];
 
-    if (!f) section(@"nothing yet", @"The profile comes with the home feed. Open the feed, then come back.", @[ OhrtAboutPlain(@"profile", @"not here yet", @"Insta\u2060gram has not sent it to this phone yet.") ]);
-    self.titles = titles;
-    self.notes = notes;
-    self.rows = sections;
+    if (!f) {
+        OhrtAboutBox *none = OhrtAboutBoxed(OhrtAboutKindLine, @"profile", @"not here yet", @[ OhrtAboutPlain(@"comes with the home feed", @"waiting", @"Insta⁠gram has not sent it to this phone yet. Open the feed, then come back.") ]);
+        [boxes addObject:none];
+    }
+    boxes.lastObject.foot = @"tap a row: what it means";
+    self.page.boxes = boxes;
+    [self.page setNeedsDisplay];
+    [self.view setNeedsLayout];
 }
 
 // The model's answer comes as a whole number and a fraction of minutes; the
@@ -434,89 +606,84 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
     id casper = OhrtCall(OhrtCurrentSession(), @"casper");
     SEL estimate = NSSelectorFromString(@"estimateMinutesToNextTargetEventAfterBackground:completionQueue:");
     if (![casper respondsToSelector:estimate]) {
-        self.nextOpen = @"not on this version";
+        self.nextOpen = @"not known";
         return;
     }
     __weak OhrtAboutViewController *weakSelf = self;
     void (^answer)(long long, float) = ^(long long whole, float minutes) {
         OhrtAboutViewController *strongSelf = weakSelf;
         if (!strongSelf) return;
-        strongSelf.nextOpen = minutes >= 90 ? [NSString stringWithFormat:@"in %.1f hours", minutes / 60] : [NSString stringWithFormat:@"in %.0f min", minutes];
+        long long rounded = llround(minutes);
+        strongSelf.nextOpen = rounded >= 60 ? [NSString stringWithFormat:@"%lldh %lldm", rounded / 60, rounded % 60] : [NSString stringWithFormat:@"%lldm", rounded];
         OhrtTry(@"about", ^{
             [strongSelf build];
         });
-        [strongSelf.tableView reloadData];
     };
     ((void (*)(id, SEL, id, id))objc_msgSend)(casper, estimate, (id)answer, dispatch_get_main_queue());
 }
 
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return self.rows.count;
+- (void)closePanel {
+    [self.panel removeFromSuperview];
+    self.panel = nil;
 }
 
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.rows[section].count;
-}
+// What a row means, in a box of the same kind at the foot of the screen.
+- (void)explain:(OhrtAboutRow *)row {
+    [self closePanel];
+    UIControl *shade = [[UIControl alloc] initWithFrame:self.view.bounds];
+    shade.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
+    [shade addTarget:self action:@selector(closePanel) forControlEvents:UIControlEventTouchUpInside];
 
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    return self.titles[section].length ? self.titles[section] : nil;
-}
+    UILabel *head = [UILabel new];
+    head.text = [NSString stringWithFormat:@"%@  %@", row.label, row.value];
+    head.font = [UIFont monospacedSystemFontOfSize:13 weight:UIFontWeightBold];
+    head.textColor = OhrtAboutHex(kOhrtAboutWhite);
+    head.numberOfLines = 0;
+    head.lineBreakMode = NSLineBreakByCharWrapping;
+    UILabel *body = [UILabel new];
+    body.text = row.about;
+    body.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightRegular];
+    body.textColor = OhrtAboutHex(kOhrtAboutText);
+    body.numberOfLines = 0;
+    UILabel *foot = [UILabel new];
+    foot.text = @"tap to close";
+    foot.font = [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightRegular];
+    foot.textColor = OhrtAboutHex(kOhrtAboutDim);
+    foot.textAlignment = NSTextAlignmentRight;
 
-- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    return self.notes[section].length ? self.notes[section] : nil;
-}
-
-- (void)tableView:(UITableView *)tableView willDisplayHeaderView:(UIView *)view forSection:(NSInteger)section {
-    if (![view isKindOfClass:[UITableViewHeaderFooterView class]]) return;
-    UILabel *label = ((UITableViewHeaderFooterView *)view).textLabel;
-    label.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
-    label.textColor = [UIColor labelColor];
-    label.text = self.titles[section];
-}
-
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    OhrtAboutRow *row = self.rows[indexPath.section][indexPath.row];
-    if (row.tiles) {
-        OhrtAboutTilesCell *tiles = [tableView dequeueReusableCellWithIdentifier:@"tiles"] ?: [[OhrtAboutTilesCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"tiles"];
-        [tiles show:row.tiles];
-        return tiles;
-    }
-    if (row.hero) {
-        OhrtAboutHeroCell *hero = [tableView dequeueReusableCellWithIdentifier:@"hero"] ?: [[OhrtAboutHeroCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"hero"];
-        hero.backgroundColor = [UIColor secondarySystemBackgroundColor];
-        hero.caption.text = row.label;
-        hero.figure.text = row.value;
-        return hero;
-    }
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"row"] ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"row"];
-    cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    cell.accessoryView = OhrtAboutMark();
-    // Meta's own names are long and have no spaces to break at.
-    BOOL raw = [row.label rangeOfString:@"_"].location != NSNotFound;
-    cell.textLabel.text = row.label;
-    cell.textLabel.font = raw ? [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightRegular] : [UIFont systemFontOfSize:14];
-    cell.textLabel.textColor = raw ? [UIColor secondaryLabelColor] : [UIColor labelColor];
-    cell.textLabel.lineBreakMode = NSLineBreakByCharWrapping;
-    cell.textLabel.numberOfLines = 0;
-    cell.detailTextLabel.text = [row.value stringByReplacingOccurrencesOfString:@"_" withString:@" "];
-    cell.detailTextLabel.font = [UIFont monospacedDigitSystemFontOfSize:14 weight:UIFontWeightSemibold];
-    cell.detailTextLabel.textColor = OhrtFactsLineColour();
-    return cell;
-}
-
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    OhrtAboutRow *row = self.rows[indexPath.section][indexPath.row];
-    if (!row.about.length) return;
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"%@: %@", row.label, row.value] message:row.about preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[ head, body, foot ]];
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = 10;
+    stack.layoutMargins = UIEdgeInsetsMake(14, 14, 12, 14);
+    stack.layoutMarginsRelativeArrangement = YES;
+    stack.userInteractionEnabled = NO;
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    UIView *card = [UIView new];
+    card.backgroundColor = OhrtAboutHex(kOhrtAboutBack);
+    card.layer.borderColor = OhrtAboutHex(kOhrtAboutBorder).CGColor;
+    card.layer.borderWidth = 1;
+    card.layer.cornerRadius = 4;
+    card.userInteractionEnabled = NO;
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    [card addSubview:stack];
+    [shade addSubview:card];
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.topAnchor constraintEqualToAnchor:card.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
+        [card.leadingAnchor constraintEqualToAnchor:shade.leadingAnchor constant:8],
+        [card.trailingAnchor constraintEqualToAnchor:shade.trailingAnchor constant:-8],
+        [card.bottomAnchor constraintEqualToAnchor:shade.bottomAnchor constant:-(self.bottomRoom + 10)],
+    ]];
+    [self.view addSubview:shade];
+    self.panel = shade;
 }
 
 @end
 
 UIViewController *OhrtAboutScreen(CGFloat bottomRoom) {
     OhrtAboutViewController *screen = [OhrtAboutViewController new];
-    [screen setBottomRoom:bottomRoom];
+    screen.bottomRoom = bottomRoom;
     return screen;
 }

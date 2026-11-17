@@ -237,6 +237,9 @@ if [ "$STOCK" -eq 0 ]; then
     # the app's folder. Made from ohrt/brand/wordmark.svg by ipa.py wordmark.
     cp "$ROOT/ohrt/brand/wordmark.png" "$STAGE/OhrtWordmark.png"
     INJECT+=("$STAGE/OhrtWordmark.png")
+    # The picture behind the top of the "hidden account data" screen.
+    cp "$ROOT/ohrt/brand/backdrop.jpg" "$STAGE/OhrtBackdrop.jpg"
+    INJECT+=("$STAGE/OhrtBackdrop.jpg")
     # Our launch screen in place of Instagram's (ipa.py launch says how). Its
     # picture is also what the tweak shows where the login screen has
     # Instagram's logo.
