@@ -117,12 +117,13 @@ static void OhrtNotesSave(void) {
     });
 }
 
-// Stories go by quickly, so the file is written a moment after the last
-// thing noted, not once for each.
+// Making the file takes longer the more it holds, and is done on the main
+// thread, so it is written half a minute after a change and when the app
+// is left, not once for each thing noted.
 static void OhrtNotesChanged(void) {
     if (gOhrtNotesUnsaved) return;
     gOhrtNotesUnsaved = YES;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         OhrtNotesSave();
     });
 }
