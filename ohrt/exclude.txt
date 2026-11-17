@@ -10,3 +10,6 @@ src/Features/StoriesAndMessages/VisualMsgModifier.x
 
 # Swaps the app icon for one of Instagram's, over ours.
 src/Features/General/TeenAppIcons.x
+
+# Replaced by ohrt/src/OhrtSeenButtons.x, which is this file with a fix.
+src/Features/StoriesAndMessages/SeenButtons.x
