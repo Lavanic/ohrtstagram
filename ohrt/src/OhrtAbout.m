@@ -80,6 +80,8 @@ static NSString *OhrtAboutOf28(id value) {
 
 typedef NSString * (*OhrtAboutFormat)(id);
 
+static NSString *const kOhrtAboutBestiesKey = @"ohrt_about_besties";
+
 enum {
     kOhrtAboutBack = 0x11111b,
     kOhrtAboutBorder = 0x5a5a5a,
@@ -448,6 +450,104 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
     OhrtLog(@"about: %lu boxes shown", (unsigned long)self.page.boxes.count);
 }
 
+// What each of the remaining values is, by Meta's name for it. None of this
+// is written down in the app: each is read off the name and held against the
+// values seen on one phone, and says so where the two disagree.
+static NSString *OhrtAboutMeaning(NSString *key) {
+    static NSDictionary<NSString *, NSString *> *meanings;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        meanings = @{
+            @"clips_producer_clips_created_28d" : @"Reels you posted in the last 28 days.",
+            @"clips_producer_days_since_last_clips_creation" : @"Days since you last posted a reel.",
+            @"clips_swipe_foward_28d" : @"Times you swiped on to the next reel in the last 28 days. The misspelling is Meta's.",
+            @"clips_vpvd_impression_28d" : @"Reels that stayed on your screen long enough to count as viewed, over 28 days. vpvd is Meta's viewport view duration: how long a thing is actually in view. Where this was checked it equalled viewer_d28_instagram_clips_organic_vpvd_imp.",
+            @"feed_fnf_organic_like_28d" : @"Likes you gave in the home feed, over 28 days, to posts from people you follow that were not ads. fnf most likely stands for friends and following.",
+            @"feed_vpvd_impression_28d" : @"Feed posts that stayed on your screen long enough to count as viewed, over 28 days.",
+            @"follow_button_tap_84d" : @"Times you pressed a follow button in the last 84 days. It counts presses, so following and unfollowing the same account adds up.",
+            @"follower_count" : @"How many accounts follow you, as the ranking system last saw it.",
+            @"following_count" : @"How many accounts you follow, as the ranking system last saw it.",
+            @"instagram_organic_like" : @"Likes you gave to anything that was not an ad, anywhere in the app. The name gives no period, but where this was checked it equalled viewer_d84_instagram_organic_like exactly, so it is the 84 day total.",
+            @"kbps_3d" : @"Your connection speed as Insta⁠gram measured it over the last 3 days, in kilobits a second. Divide by 1,000 for megabits. It is used to pick video quality and how much to load ahead.",
+            @"kbps_7d" : @"Your connection speed as Insta⁠gram measured it over the last 7 days, in kilobits a second. Divide by 1,000 for megabits.",
+            @"max_ram_7d" : @"The most memory your phone reported having in the last 7 days, in bytes. It is the phone's memory, not how much Insta⁠gram used: where this was checked it matched the phone's 12 GB.",
+            @"raw_udv_overall_max" : @"Not known. udv is an abbreviation that is nowhere explained in the app.",
+            @"reels_user_cohort_segment_based_on_play" : @"The first version of your reels tier, a number for how much you play reels. The scale is not in the app.",
+            @"story_reply_l28_trait" : @"A label for how much you reply to stories, over the last 28 days. The possible labels are not in the app.",
+            @"unit_tray_time_spent_28d" : @"Time spent in a tray, a sideways strip of items such as the stories row, over 28 days. Which tray is not said.",
+            @"user_clips_tab_timespent_1d" : @"Seconds you spent in the Reels tab in one day.",
+            @"user_clips_tab_timespent_28d" : @"Seconds you spent in the Reels tab over 28 days.",
+            @"user_clips_tab_timespent_7d" : @"Seconds you spent in the Reels tab over 7 days.",
+            @"user_connected_feed_like_rate_28d" : @"An older name for the share of posts from people you follow that you liked, over 28 days.",
+            @"user_feed_impressions_28d" : @"Posts the home feed showed you in the last 28 days.",
+            @"user_feed_inventory_28d" : @"Posts from people you follow that were there for the feed to show you, over 28 days. Inventory is Meta's word for what is available, seen or not.",
+            @"user_feed_reciprocal_post_consumption_rate_7d" : @"Of the posts from accounts that follow you back, the share you saw, over 7 days. 1 means all of them.",
+            @"user_feed_reciprocal_post_inventory_7d" : @"Posts from accounts that follow you back that were there to show you, over 7 days.",
+            @"user_feed_recs_cold_start_bucket" : @"A group for accounts the feed knows too little about to suggest posts to. Cold start is the usual name for that problem.",
+            @"user_friend_story_inventory_28d" : @"Stories from accounts that follow you back that were there for you to watch, over 28 days.",
+            @"user_interest_feed_inventory_28d" : @"Posts picked for your interests, from accounts you do not follow, that were there to suggest to you, over 28 days.",
+            @"user_num_comments_received_28d" : @"Comments your posts got in the last 28 days.",
+            @"user_num_comments_received_by_normal_28d" : @"Comments received in the last 28 days, counted \"by normal\". What normal means is not in the app, and where this was checked the number was far larger than the plain count beside it, so it does not count the same thing.",
+            @"user_num_l7_core_foreground_session_count" : @"Times you brought Insta⁠gram to the front in the last 7 days. The same count as core_foreground_session_count_l7 under a second name.",
+            @"user_num_likes_received_by_normal_28d" : @"Likes received in the last 28 days, counted \"by normal\". What normal means is not in the app.",
+            @"user_num_videos_28d" : @"Videos you posted in the last 28 days.",
+            @"user_sender_l28" : @"On how many of the last 28 days you sent at least one message.",
+            @"user_stories_impressions_bucket_28d" : @"A range for how many stories you were shown over 28 days.",
+            @"user_story_interaction_received_28d" : @"Replies and reactions your stories got in the last 28 days.",
+            @"user_story_like_received_28d" : @"Likes your stories got in the last 28 days.",
+            @"user_story_media_impression_received_28d" : @"Views your stories got in the last 28 days.",
+            @"viewer_d28_direct_reshare_button_tap" : @"Times you pressed the share button on a post in the last 28 days. Compare it with viewer_d28_direct_reshare_send, the times you went on to send.",
+            @"viewer_d28_instagram_clips_organic_time_spent" : @"Named as time spent on reels that were not ads, over 28 days. Where this was checked it equalled the count of viewed reels exactly, so it may hold that count and not a time.",
+            @"viewer_d28_instagram_clips_organic_vpvd_imp" : @"Reels, not ads, that stayed on your screen long enough to count as viewed, over 28 days.",
+            @"viewer_d28_instagram_clips_viewer_entry" : @"Times you went into the full screen reels player in the last 28 days.",
+            @"viewer_d28_instagram_clips_viewer_entry_ctr" : @"Of the times a reel was offered to you outside the player, the share where you tapped in, over 28 days. ctr is click through rate.",
+            @"viewer_d28_instagram_explore_organic_impression" : @"Posts Explore showed you in the last 28 days, not counting ads.",
+            @"viewer_d28_instagram_feed_fnf_organic_impression" : @"Posts from people you follow that the home feed showed you in the last 28 days, not counting ads.",
+            @"viewer_d28_instagram_feed_instagram_organic_like" : @"Likes you gave in the home feed in the last 28 days to posts that were not ads.",
+            @"viewer_d28_instagram_feed_vpvd_impression" : @"Feed posts that stayed on your screen long enough to count as viewed, over 28 days. One post can count more than once.",
+            @"viewer_d28_instagram_organic_like" : @"Named as likes you gave to anything that was not an ad, over 28 days. Where this was checked it was smaller than the feed's own count for the same days, so it does not cover what its name says.",
+            @"viewer_d28_instagram_organic_vpvd_imp" : @"Things that were not ads and stayed on your screen long enough to count as viewed, over 28 days.",
+            @"viewer_d28_instagram_rifu_chaining_time_spent" : @"Time spent in the run of reels that opens when you tap a reel in the feed, over 28 days. rifu most likely stands for reels in feed unit.",
+            @"viewer_d28_instagram_rifu_clips_swipe_forward" : @"Swipes on to the next reel after opening one from the feed, over 28 days.",
+            @"viewer_d28_instagram_rifu_explore_home_click_ctr" : @"Named as a click rate for reels reached from the feed unit or Explore, over 28 days. Where this was checked it was a whole number, so it is a count or a group and not a rate.",
+            @"viewer_d28_instagram_story_reel_playback_entry" : @"Times you opened someone's stories in the last 28 days. In Meta's code a reel is one person's run of stories, not a Reel.",
+            @"viewer_d28_instagram_unit_tray_time_spent" : @"Seconds spent in a tray, a sideways strip of items, over 28 days. Which tray is not said.",
+            @"viewer_d28_video_complete_ctr" : @"Of the videos you started, the share you watched to the end, over 28 days.",
+            @"viewer_d7_video_complete" : @"Videos you watched all the way through in the last 7 days.",
+            @"viewer_d84_instagram_clips_organic_impression" : @"Reels put in front of you in the last 84 days, not counting ads.",
+            @"viewer_d84_instagram_clips_organic_save" : @"Reels you saved in the last 84 days.",
+            @"viewer_d84_instagram_clips_swipe_forward" : @"Times you swiped on to the next reel in the last 84 days.",
+            @"viewer_d84_instagram_clips_viewer_entry" : @"Times you went into the full screen reels player in the last 84 days.",
+            @"viewer_d84_instagram_feed_direct_reshare_send" : @"Posts you sent to someone from the home feed in the last 84 days.",
+            @"viewer_d84_instagram_feed_fnf_organic_impression" : @"Posts from people you follow that the home feed showed you in the last 84 days, not counting ads.",
+            @"viewer_d84_instagram_feed_fnf_organic_like" : @"Likes you gave in the home feed, over 84 days, to posts from people you follow.",
+            @"viewer_d84_instagram_feed_organic_like" : @"Likes you gave in the home feed in the last 84 days to posts that were not ads, followed or suggested.",
+            @"viewer_d84_instagram_feed_organic_profile" : @"Times you tapped through from a feed post to its profile in the last 84 days.",
+            @"viewer_d84_instagram_organic_like" : @"Likes you gave to anything that was not an ad, anywhere in the app, in the last 84 days.",
+            @"viewer_d84_instagram_organic_viewed_impression" : @"Everything that was not an ad and counted as seen by you, anywhere in the app, in the last 84 days.",
+            @"viewer_d84_instagram_reel_playback_entry" : @"Times you opened someone's stories in the last 84 days. In Meta's code a reel is one person's run of stories.",
+            @"viewer_d84_instagram_reel_send_message" : @"Replies you sent to stories in the last 84 days.",
+            @"viewer_d84_instagram_reel_tray_impression" : @"Story circles shown to you in the row at the top of the feed in the last 84 days. Every circle that scrolls into view counts.",
+            @"viewer_d84_skip" : @"Things you skipped in the last 84 days. What counts as a skip is not said.",
+        };
+    });
+    NSString *meaning = meanings[key];
+    if (meaning) return [meaning stringByAppendingString:@"\n\nWorked out from Meta's name for it and the values seen. Meta does not publish what these mean."];
+    // A name not met before is taken apart instead.
+    NSDictionary<NSString *, NSString *> *parts = @{
+        @"l7" : @"the last 7 days", @"l28" : @"the last 28 days", @"d7" : @"a total over 7 days", @"d28" : @"a total over 28 days", @"d84" : @"a total over 84 days", @"1d" : @"one day", @"7d" : @"7 days",
+        @"28d" : @"28 days", @"84d" : @"84 days", @"clips" : @"Reels", @"reel" : @"one person's stories", @"connected" : @"from people you follow", @"organic" : @"not an ad", @"fnf" : @"friends and following",
+        @"vpvd" : @"on screen long enough to count as viewed", @"ifr" : @"suggested in the feed", @"rifu" : @"reels in the feed", @"inventory" : @"what was there to show you", @"impression" : @"shown to you",
+        @"ctr" : @"a click through rate", @"viewer" : @"about what you look at", @"bucket" : @"a range, not an exact number", @"timespent" : @"time, in seconds", @"reciprocal" : @"accounts that follow you back",
+    };
+    NSMutableArray<NSString *> *read = [NSMutableArray array];
+    for (NSString *part in [key componentsSeparatedByString:@"_"]) {
+        if (parts[part]) [read addObject:[NSString stringWithFormat:@"%@ is %@", part, parts[part]]];
+    }
+    NSString *start = @"One of the values Insta\u2060gram stores about you, under the name Meta gave it. This one has not been looked into.";
+    return read.count ? [NSString stringWithFormat:@"%@ In the name, %@.", start, [read componentsJoinedByString:@", "]] : start;
+}
+
 static OhrtAboutRow *OhrtAboutPlain(NSString *label, NSString *value, NSString *about) {
     OhrtAboutRow *row = [OhrtAboutRow new];
     row.label = label;
@@ -600,8 +700,29 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
     OhrtAboutAdd(rows, f, @"follows that follow back", @"user_reciprocal_follow_rate", OhrtAboutRate, @"Of the accounts you follow, the share that follow you back.");
     if (rows.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRates, @"rates", @"of what you were shown", rows)];
 
+    // Instagram fills its list of scores a couple of seconds after it
+    // starts. Until then the rows shown last time stand in, kept on the phone.
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSUInteger scored = 0;
     NSArray<OhrtAboutRow *> *closest = [self besties:&scored];
+    if (closest.count) {
+        NSMutableArray *kept = [NSMutableArray array];
+        for (OhrtAboutRow *row in closest) [kept addObject:@{@"label" : row.label, @"value" : row.value, @"about" : row.about, @"part" : @(row.part), @"place" : @(row.place)}];
+        [defaults setObject:@{@"rows" : kept, @"scored" : @(scored), @"viewer" : [OhrtCall(OhrtCall(OhrtCurrentSession(), @"user"), @"pk") description] ?: @""} forKey:kOhrtAboutBestiesKey];
+    } else {
+        NSDictionary *kept = [defaults dictionaryForKey:kOhrtAboutBestiesKey];
+        NSMutableArray<OhrtAboutRow *> *last = [NSMutableArray array];
+        if ([kept[@"viewer"] isEqual:[OhrtCall(OhrtCall(OhrtCurrentSession(), @"user"), @"pk") description] ?: @""]) {
+            for (NSDictionary *one in [kept[@"rows"] isKindOfClass:[NSArray class]] ? kept[@"rows"] : @[]) {
+                if (![one isKindOfClass:[NSDictionary class]] || ![one[@"label"] isKindOfClass:[NSString class]] || ![one[@"value"] isKindOfClass:[NSString class]]) continue;
+                OhrtAboutRow *row = OhrtAboutPlain(one[@"label"], one[@"value"], [one[@"about"] isKindOfClass:[NSString class]] ? one[@"about"] : @"");
+                row.part = [one[@"part"] doubleValue];
+                row.place = [one[@"place"] unsignedIntegerValue];
+                [last addObject:row];
+            }
+        }
+        if (last.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRanked, @"bestie_coefficient", [OhrtGrouped([kept[@"scored"] longLongValue]) stringByAppendingString:@" accounts scored"], last)];
+    }
     if (closest.count) {
         [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRanked, @"bestie_coefficient", [OhrtGrouped((long long)scored) stringByAppendingString:@" accounts scored"], closest)];
         if (self.waited) OhrtLog(@"about: the scores came %lu seconds after the screen opened", (unsigned long)self.waited);
@@ -630,12 +751,10 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
         @"user_story_inventory_28d", @"user_feed_connected_like_rate_d28", @"user_feed_connected_profile_tap_rate_d28", @"user_feed_connected_reshare_rate_d28", @"user_feed_ifr_reels_like_rate_28d",
         @"user_reciprocal_follow_rate"
     ]];
-    NSString *raw = @"One of the values Insta⁠gram stores about you, under the name Meta gave it. In those names l7 and l28 mean the last 7 and 28 days, d28 and d84 a total over that many days, clips "
-                    @"means Reels, connected means from people you follow, and organic means not an ad.";
     rows = [NSMutableArray array];
     for (NSString *key in [[f allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
         if (![key isKindOfClass:[NSString class]] || [shown containsObject:key] || !OhrtAboutFilled(f[key])) continue;
-        [rows addObject:OhrtAboutPlain(key, OhrtAboutNumber(f[key]), raw)];
+        [rows addObject:OhrtAboutPlain(key, OhrtAboutNumber(f[key]), OhrtAboutMeaning(key))];
     }
     if (rows.count) [boxes addObject:OhrtAboutBoxed(OhrtAboutKindRaw, @"raw", [NSString stringWithFormat:@"%lu values, meta's names", (unsigned long)rows.count], rows)];
 
