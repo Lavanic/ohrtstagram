@@ -1,9 +1,9 @@
 // Facts on a profile: a few small lines above the Follow and Message
 // buttons, of what the app holds about the account and does not show.
 //
-//   id 1234567890, creator, follows you since 03.05.19, followed since 03.02.19,
-//   you liked 214 posts (last 10.30.26), commented 12 times, watched 88 stories since 11.15.26,
-//   340 messages between you since 01.10.20, story 3h ago
+//   id 1234567890, creator, follows since 03.05.19, followed since 03.02.19,
+//   you: 214 likes (10.30.26), 12 comments, 88 stories watched since 11.15.26,
+//   340 dms since 01.10.20, story 3h ago
 //
 // There are two sources, and nothing is asked of Instagram for either. The
 // first is what the app already holds when a profile opens: the id, the
@@ -137,14 +137,14 @@ static NSInteger OhrtCountOf(NSString *kind, NSDictionary *past, NSString *pk, N
     return count;
 }
 
-// "liked 214 posts (last 10.30.26)". The first of these on a line is
-// given its "you" by the caller.
-static void OhrtAddDone(NSMutableArray<NSString *> *done, NSString *kind, NSDictionary *past, NSString *pk, NSString *verb, NSString *one, NSString *many, BOOL withLast) {
+// "214 likes (10.30.26)", the day being the last one. The first of these
+// on a line is given its "you:" by the caller.
+static void OhrtAddDone(NSMutableArray<NSString *> *done, NSString *kind, NSDictionary *past, NSString *pk, NSString *one, NSString *many, BOOL withLast) {
     NSTimeInterval last = 0;
     NSInteger count = OhrtCountOf(kind, past, pk, &last);
     if (count < 1) return;
-    NSString *text = [NSString stringWithFormat:@"%@ %ld %@", verb, (long)count, count == 1 ? one : many];
-    if (withLast && last > 0) text = [text stringByAppendingFormat:@" (last %@)", OhrtStamp(@(last))];
+    NSString *text = [NSString stringWithFormat:@"%ld %@", (long)count, count == 1 ? one : many];
+    if (withLast && last > 0) text = [text stringByAppendingFormat:@" (%@)", OhrtStamp(@(last))];
     [done addObject:text];
 }
 
@@ -155,7 +155,7 @@ static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString 
     BOOL followsYou = OhrtCallBool(user, @"followsCurrentUser");
     BOOL followed = OhrtCallBool(user, @"followedByCurrentUser");
 
-    if (followsYou) [facts addObject:past[@"follows_you"] ? [@"follows you since " stringByAppendingString:OhrtStamp(past[@"follows_you"])] : @"follows you"];
+    if (followsYou) [facts addObject:past[@"follows_you"] ? [@"follows since " stringByAppendingString:OhrtStamp(past[@"follows_you"])] : @"follows you"];
     else if (past[@"follows_you"]) [facts addObject:[NSString stringWithFormat:@"followed you from %@ but not now", OhrtStamp(past[@"follows_you"])]];
 
     // A follow noted here is the newer one: it happened after the export.
@@ -182,17 +182,17 @@ static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString 
     BOOL whole = OhrtExportDate() > 0;
     NSString *began = OhrtActivityBegan() > 0 ? OhrtStamp(@(OhrtActivityBegan())) : nil;
     NSMutableArray<NSString *> *done = [NSMutableArray array];
-    OhrtAddDone(done, @"likes", past, pk, @"liked", @"post", @"posts", YES);
-    OhrtAddDone(done, @"comments", past, pk, @"commented", @"time", @"times", NO);
-    OhrtAddDone(done, @"story_likes", past, pk, @"liked", @"story", @"stories", NO);
-    OhrtAddDone(done, @"saved", past, pk, @"saved", @"post", @"posts", NO);
+    OhrtAddDone(done, @"likes", past, pk, @"like", @"likes", YES);
+    OhrtAddDone(done, @"comments", past, pk, @"comment", @"comments", NO);
+    OhrtAddDone(done, @"story_likes", past, pk, @"story like", @"story likes", NO);
+    OhrtAddDone(done, @"saved", past, pk, @"save", @"saves", NO);
     NSUInteger watched = OhrtActivityTimes(pk, @"stories_seen").count;
     if (watched) {
-        NSString *text = [NSString stringWithFormat:@"watched %lu %@", (unsigned long)watched, watched == 1 ? @"story" : @"stories"];
+        NSString *text = [NSString stringWithFormat:@"%lu %@ watched", (unsigned long)watched, watched == 1 ? @"story" : @"stories"];
         [done addObject:whole && began ? [text stringByAppendingFormat:@" since %@", began] : text];
     }
     if (done.count) {
-        done[0] = whole || !began ? [@"you " stringByAppendingString:done[0]] : [NSString stringWithFormat:@"since %@ you %@", began, done[0]];
+        done[0] = whole || !began ? [@"you: " stringByAppendingString:done[0]] : [NSString stringWithFormat:@"you since %@: %@", began, done[0]];
         [facts addObjectsFromArray:done];
     }
 
@@ -203,7 +203,7 @@ static void OhrtAddHistory(NSMutableArray<NSString *> *facts, id user, NSString 
     NSTimeInterval counted = 0;
     NSInteger messages = [thread[@"messages"] integerValue] + OhrtActivityMessages(pk, &counted);
     if (messages > 0) {
-        [facts addObject:[NSString stringWithFormat:@"%ld %@ between you since %@", (long)messages, messages == 1 ? @"message" : @"messages", OhrtStamp(thread[@"first"] ?: @(counted))]];
+        [facts addObject:[NSString stringWithFormat:@"%ld %@ since %@", (long)messages, messages == 1 ? @"dm" : @"dms", OhrtStamp(thread[@"first"] ?: @(counted))]];
     }
 }
 
