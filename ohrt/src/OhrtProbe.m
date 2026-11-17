@@ -82,17 +82,6 @@ static void OhrtProbeDictionary(NSString *what, id dictionary) {
     }
 }
 
-void OhrtProbeReel(id reel) {
-    static NSUInteger told;
-    if (!reel || !OhrtProbeMay(&told, 6)) return;
-    OhrtTry(@"probe", ^{
-        id ranker = OhrtCallValue(reel, @"rankerScores");
-        OhrtLog(@"probe: a story in the tray: ranked %@, seen-ranked %@, scores %@", OhrtProbeShow(OhrtCallValue(reel, @"rankedPosition")), OhrtProbeShow(OhrtCallValue(reel, @"seenRankedPosition")),
-                OhrtProbeFields(ranker, @[ @"ptap", @"vm", @"bffScores", @"preply", @"plike", @"pskip", @"pnext", @"preciprocal", @"pcontact", @"pevpvd", @"timeSpent", @"emeimps", @"adjustIntegrityScores",
-                                           @"crownVmScoresFinal", @"generalVmScoresFinal", @"generalVmScoreWithoutPtap", @"rankedAtTimestampS" ]));
-    });
-}
-
 void OhrtProbeMedia(id media) {
     static NSUInteger told;
     if (!media || !OhrtProbeMay(&told, 10)) return;

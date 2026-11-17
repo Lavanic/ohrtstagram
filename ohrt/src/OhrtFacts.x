@@ -423,7 +423,6 @@ static void OhrtAddTray(NSMutableArray<NSString *> *facts, NSMutableArray<NSStri
     id reel = ((id (*)(id, SEL, id))objc_msgSend)(map, stored, pk);
     if (!reel) return;
     [fields addObject:@"tray_reel"];
-    OhrtProbeReel(reel);
     id ranker = OhrtCallValue(reel, @"rankerScores");
     id tap = OhrtCallValue(ranker, @"ptap");
     // The first stories seen all came with the same 0.2115, a default
