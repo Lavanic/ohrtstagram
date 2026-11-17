@@ -91,10 +91,31 @@ static BOOL OhrtTabHasOurs(UIView *bar) {
 static UIViewController *gOhrtTabKept;
 static __weak UIViewController *gOhrtTabKeptOn;
 
+// The tab our screen is laid over. It is told it has gone from view, so
+// that a video in it stops, and that it is back when ours closes.
+static __weak UIViewController *gOhrtTabCovered;
+
+static void OhrtTabCover(UIViewController *controller) {
+    id under = OhrtCallValue(controller, @"selectedViewController");
+    if (![under isKindOfClass:[UIViewController class]] || !((UIViewController *)under).viewIfLoaded.window) return;
+    [under beginAppearanceTransition:NO animated:NO];
+    [under endAppearanceTransition];
+    gOhrtTabCovered = under;
+}
+
+static void OhrtTabUncover(void) {
+    UIViewController *under = gOhrtTabCovered;
+    gOhrtTabCovered = nil;
+    if (!under.viewIfLoaded.window) return;
+    [under beginAppearanceTransition:YES animated:NO];
+    [under endAppearanceTransition];
+}
+
 static void OhrtTabClose(void) {
     UIViewController *screen = gOhrtTabScreen;
     if (!screen) return;
     gOhrtTabScreen = nil;
+    OhrtTabUncover();
     gOhrtTabKept = screen;
     gOhrtTabKeptOn = gOhrtTabController;
     [screen willMoveToParentViewController:nil];
@@ -139,6 +160,7 @@ static void OhrtTabClose(void) {
         else [controller.view addSubview:screen.view];
         [screen didMoveToParentViewController:controller];
         gOhrtTabScreen = screen;
+        OhrtTabCover(controller);
         OhrtTabSelect(bar, [buttons indexOfObject:gOhrtTabButton]);
         gOhrtTabButton.selected = YES;
     });
