@@ -101,7 +101,7 @@ static NSArray<NSNumber *> *OhrtLikesEntry(NSString *mediaId) {
 
 BOOL OhrtLikesCountedNumber(NSString *mediaId, long long *count, BOOL *more) {
     NSArray<NSNumber *> *counted = OhrtLikesEntry(mediaId);
-    if (!counted) return NO;
+    if (!counted || counted[0].longLongValue <= 0) return NO;
     if (count) *count = counted[0].longLongValue;
     if (more) *more = counted[1].boolValue;
     return YES;
@@ -391,10 +391,11 @@ static void OhrtLikersArrived(OhrtLikersFetch *fetch) {
         said++;
         OhrtLog(@"likes: %@, %@, answered in %.0f ms", fetch.chrono ? @"newest likers" : @"likers", told, (CACurrentMediaTime() - fetch.asked) * 1000);
     }
-    if (count > 0) {
-        OhrtLikesKeep(fetch.mediaId, count, floor);
-        OhrtLikesAnnounce(fetch.mediaId);
-    }
+    // A list that comes back empty is kept too, so the post is not read
+    // again each time it comes on screen. It is not shown: no likes and a
+    // list Instagram holds back look the same.
+    OhrtLikesKeep(fetch.mediaId, MAX(count, 0), floor);
+    OhrtLikesAnnounce(fetch.mediaId);
     [fetch end:NO];
 }
 
