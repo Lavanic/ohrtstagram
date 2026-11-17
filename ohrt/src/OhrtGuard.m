@@ -34,9 +34,15 @@ static OhrtGuard gOhrtGuard;
 static BOOL gOhrtForced;
 static BOOL gOhrtLaunching;
 
+// Asked on every preference read, so the environment is looked at once.
 static BOOL OhrtPrewarmed(void) {
-    const char *value = getenv("ActivePrewarm");
-    return value && value[0] == '1';
+    static BOOL prewarmed;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        const char *value = getenv("ActivePrewarm");
+        prewarmed = value && value[0] == '1';
+    });
+    return prewarmed;
 }
 
 // Applies one event to the guard and writes its number out if it moved.
