@@ -218,6 +218,12 @@ static OhrtLikersFetch *gOhrtFetching;
 static NSTimeInterval gOhrtNextAsk;
 static NSTimeInterval gOhrtPausedUntil;
 static BOOL gOhrtPumpScheduled;
+// A post whose newest-first read was refused, waiting out the gap before
+// the usual list is tried. Nothing else is read meanwhile.
+static NSString *gOhrtFallingBack;
+// Newest-first reads refused in a row with nothing read in between.
+static NSUInteger gOhrtRefusedRun;
+static const NSUInteger kOhrtRefusedRunMost = 3;
 // Posts given up on this run: failed, skipped or scrolled past. Shown with
 // no count until they come on screen again.
 static NSMutableSet<NSString *> *gOhrtSkipped;
@@ -325,8 +331,31 @@ static BOOL OhrtLikersStart(NSString *mediaId, BOOL chrono) {
     __weak OhrtLikersFetch *weakFetch = fetch;
     fetch.done = ^(BOOL refused) {
         if (gOhrtFetching == weakFetch) gOhrtFetching = nil;
-        NSTimeInterval retryAt = 0;
-        if (weakFetch.wantsPlain && OhrtLikesMayAsk(&retryAt) && OhrtLikersStart(mediaId, NO)) return;
+        if (weakFetch.wantsPlain) {
+            // The usual list is read once the gap since the refused read
+            // has passed. A run of refusals with nothing read in between
+            // is Instagram saying no to both.
+            if (++gOhrtRefusedRun >= kOhrtRefusedRunMost) {
+                refused = YES;
+            } else {
+                NSTimeInterval retryAt = 0;
+                if (OhrtLikesMayAsk(&retryAt)) {
+                    if (OhrtLikersStart(mediaId, NO)) return;
+                } else if (retryAt > 0 && retryAt == gOhrtNextAsk) {
+                    gOhrtFallingBack = mediaId;
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(MAX(0.05, retryAt - [NSDate date].timeIntervalSince1970) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        OhrtTry(@"likes", ^{
+                            gOhrtFallingBack = nil;
+                            NSTimeInterval again = 0;
+                            if (OhrtLikesMayAsk(&again) && OhrtLikersStart(mediaId, NO)) return;
+                            OhrtLikesDrop(mediaId);
+                            OhrtLikesPump();
+                        });
+                    });
+                    return;
+                }
+            }
+        }
         if (!OhrtLikesEntry(mediaId)) OhrtLikesSkip(mediaId);
         OhrtLikesAnnounce(mediaId);
         if (refused) {
@@ -335,6 +364,7 @@ static BOOL OhrtLikersStart(NSString *mediaId, BOOL chrono) {
             NSArray<NSString *> *waiting = gOhrtWanted.array;
             [gOhrtWanted removeAllObjects];
             for (NSString *other in waiting) OhrtLikesAnnounce(other);
+            gOhrtRefusedRun = 0;
             OhrtLog(@"likes: Instagram refused, no more likers read for %.0f minutes", kOhrtLikersPause / 60);
             return;
         }
@@ -352,6 +382,7 @@ static BOOL OhrtLikersStart(NSString *mediaId, BOOL chrono) {
 }
 
 static void OhrtLikersArrived(OhrtLikersFetch *fetch) {
+    gOhrtRefusedRun = 0;
     BOOL floor = NO;
     NSString *told = nil;
     long long count = OhrtLikesCountIn(fetch.source, &floor, &told);
@@ -368,7 +399,7 @@ static void OhrtLikersArrived(OhrtLikersFetch *fetch) {
 }
 
 static void OhrtLikesPump(void) {
-    if (gOhrtFetching || !gOhrtWanted.count) return;
+    if (gOhrtFetching || gOhrtFallingBack || !gOhrtWanted.count) return;
     if ([UIApplication sharedApplication].applicationState != UIApplicationStateActive) return;
     NSTimeInterval retryAt = 0;
     if (!OhrtLikesMayAsk(&retryAt)) {
@@ -390,7 +421,7 @@ void OhrtLikesWant(NSString *mediaId) {
     if (!mediaId || !OhrtFeature(kOhrtLikesKey) || OhrtSafeLaunch() || OhrtLikesIsFresh(mediaId)) return;
     OhrtLikesLoadLimits();
     if (gOhrtPausedUntil > [NSDate date].timeIntervalSince1970) return;
-    if ([gOhrtFetching.mediaId isEqualToString:mediaId]) return;
+    if ([gOhrtFetching.mediaId isEqualToString:mediaId] || [gOhrtFallingBack isEqualToString:mediaId]) return;
     if (!gOhrtWanted) gOhrtWanted = [NSMutableOrderedSet orderedSet];
     if ([gOhrtSkipped containsObject:mediaId]) {
         [gOhrtSkipped removeObject:mediaId];
