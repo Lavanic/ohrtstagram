@@ -57,6 +57,14 @@ static NSString *OhrtAboutRate(id value) {
     return [NSString stringWithFormat:@"%.1f%%", [value doubleValue] * 100];
 }
 
+// The codes Instagram's own gender setting posts: its picker offers 1, 2, 4
+// and 3, with words of your own only for 4.
+static NSString *OhrtAboutGender(id value) {
+    NSDictionary<NSNumber *, NSString *> *names = @{@1 : @"male", @2 : @"female", @3 : @"prefer not to say", @4 : @"custom"};
+    NSString *name = [value isKindOfClass:[NSNumber class]] ? names[@([value integerValue])] : nil;
+    return name ? [NSString stringWithFormat:@"%@ (%@)", name, value] : OhrtAboutNumber(value);
+}
+
 typedef NSString * (*OhrtAboutFormat)(id);
 
 @interface OhrtAboutRow : NSObject
@@ -159,7 +167,7 @@ static OhrtAboutRow *OhrtAboutPlain(NSString *label, NSString *value) {
     OhrtAboutAdd(rows, f, @"reels cohort", @"clips_cohort", NULL);
     OhrtAboutAdd(rows, f, @"reels segment", @"reels_user_cohort_segment_based_on_play_v2", NULL);
     OhrtAboutAdd(rows, f, @"predicted age", @"user_predicted_age", NULL);
-    OhrtAboutAdd(rows, f, @"gender code", @"gender", NULL);
+    OhrtAboutAdd(rows, f, @"gender", @"gender", OhrtAboutGender);
     OhrtAboutAdd(rows, f, @"teen, by its model", @"user_is_teen_model_based", NULL);
     OhrtAboutAdd(rows, f, @"active days of 28", @"user_l28_ig_classic_count", NULL);
     OhrtAboutAdd(rows, f, @"notes bucket", @"notes_inventory_bucket", NULL);
