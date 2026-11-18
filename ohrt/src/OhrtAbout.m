@@ -103,6 +103,7 @@ enum {
 
 typedef NS_ENUM(NSInteger, OhrtAboutKind) {
     OhrtAboutKindLine,
+    OhrtAboutKindDay,
     OhrtAboutKindGrid,
     OhrtAboutKindRates,
     OhrtAboutKindRanked,
@@ -147,6 +148,9 @@ static NSString *OhrtAboutFit(NSString *text, NSInteger width) {
 @property (nonatomic, copy) NSArray<OhrtAboutRow *> *rows;
 // Its values are not here yet: the rows hold their places, empty.
 @property (nonatomic) BOOL loading;
+// For a day: which of the 24 hours from `firstHour` on are lit.
+@property (nonatomic, copy) NSArray<NSNumber *> *hours;
+@property (nonatomic, strong) NSDate *firstHour;
 @end
 
 @implementation OhrtAboutBox
@@ -197,6 +201,7 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
 
 - (NSInteger)linesIn:(OhrtAboutBox *)box {
     if (box.kind == OhrtAboutKindGrid) return (box.rows.count + 1) / 2;
+    if (box.kind == OhrtAboutKindDay) return 3;
     return box.rows.count + (box.under.length ? 1 : 0);
 }
 
@@ -216,7 +221,7 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
 }
 
 - (BOOL)fills:(OhrtAboutBox *)box {
-    return box.kind == OhrtAboutKindRates || box.kind == OhrtAboutKindRanked;
+    return box.kind == OhrtAboutKindRates || box.kind == OhrtAboutKindRanked || box.kind == OhrtAboutKindDay;
 }
 
 - (CGRect)areaOfBox:(OhrtAboutBox *)wanted {
@@ -348,6 +353,33 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
     }
 }
 
+// The next 24 hours as btop draws a meter: a block an hour, the first being
+// the hour it is now, lit where a predicted time falls and colored along
+// the palette. Under every third block, a notch and the hour it starts.
+- (void)day:(OhrtAboutBox *)box row:(NSInteger)row filled:(double)filled {
+    static const uint32_t stops[] = {0xf05050, 0xf0c050, 0x50f095, 0x4897d4, 0xff40b6};
+    static NSDateFormatter *hour;
+    if (!hour) {
+        hour = [NSDateFormatter new];
+        hour.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+        hour.dateFormat = @"ha";
+    }
+    CGFloat left = [self x:2], wide = (kOhrtAboutColumns - 4) * _cw / 24, gap = _cw * 0.3, tall = _ch * 0.76;
+    NSInteger shown = (NSInteger)ceil(filled * 24);
+    for (NSInteger at = 0; at < 24; at++) {
+        BOOL lit = at < (NSInteger)box.hours.count && box.hours[at].boolValue && at < shown;
+        double along = at / 23.0 * 3.9999;
+        [OhrtAboutHex(lit ? OhrtAboutMix(stops[(int)along], stops[(int)along + 1], along - (int)along) : kOhrtAboutOff) setFill];
+        CGFloat x = left + at * wide;
+        UIRectFill(CGRectMake(x, [self y:row] + (_ch - tall) / 2, wide - gap, tall));
+        if (at % 3) continue;
+        [OhrtAboutHex(kOhrtAboutDim) setFill];
+        UIRectFill(CGRectMake(x, [self y:row + 1] - 1, 1, 4));
+        NSString *label = at == 0 ? @"now" : [hour stringFromDate:[box.firstHour dateByAddingTimeInterval:at * 3600]];
+        [label drawAtPoint:CGPointMake(x, [self y:row + 1] + (_ch - _plain.lineHeight) / 2 + 2) withAttributes:@{NSFontAttributeName : _plain, NSForegroundColorAttributeName : OhrtAboutHex(kOhrtAboutDim)}];
+    }
+}
+
 - (void)frame:(OhrtAboutBox *)box index:(NSUInteger)index from:(NSInteger)first to:(NSInteger)last {
     CGFloat left = [self x:0] + _cw / 2, right = [self x:kOhrtAboutColumns - 1] + _cw / 2;
     CGFloat top = [self y:first] + _ch / 2, bottom = [self y:last] + _ch / 2, round = 4;
@@ -431,6 +463,7 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
             }
             switch (box.kind) {
                 case OhrtAboutKindLine:
+                case OhrtAboutKindDay:
                     [self pair:item row:line column:2 width:inner label:kOhrtAboutText value:kOhrtAboutQuietRed bold:YES];
                     break;
                 case OhrtAboutKindGrid:
@@ -451,6 +484,10 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
                     [self pair:item row:line column:2 width:inner label:kOhrtAboutDim value:kOhrtAboutText bold:NO];
                     break;
             }
+        }
+        if (box.kind == OhrtAboutKindDay) {
+            if (seen) [self day:box row:row + 2 filled:filled];
+            if (collect && box.rows.count && box.rows[0].about.length) [_hits addObject:@[ [NSValue valueWithCGRect:CGRectMake([self x:1], [self y:row + 2], (columns - 2) * _cw, 2 * _ch)], box.rows[0] ]];
         }
         if (seen && box.kind == OhrtAboutKindGrid) {
             UIBezierPath *divide = [UIBezierPath bezierPath];
@@ -484,10 +521,6 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
 @property (nonatomic, strong) OhrtAboutPage *page;
 @property (nonatomic, strong) UIImageView *backdrop;
 @property (nonatomic, strong) UIView *panel;
-// The predictor's answer, nil while it is being asked.
-@property (nonatomic, copy) NSString *nextOpen;
-@property (nonatomic) BOOL nextOpenFailed;
-@property (nonatomic) NSUInteger asks;
 @property (nonatomic) CGFloat bottomRoom;
 @property (nonatomic) BOOL waiting;
 @property (nonatomic) NSUInteger waited;
@@ -588,7 +621,6 @@ static UIFont *OhrtAboutFont(CGFloat advance, UIFontWeight weight) {
 // laid over it, so the screen fills itself as it loads.
 - (void)refresh {
     OhrtTry(@"about", ^{
-        [self askNextOpen];
         [self build];
     });
     OhrtLog(@"about: %lu boxes shown", (unsigned long)self.page.boxes.count);
@@ -718,6 +750,36 @@ static void OhrtAboutAdd(NSMutableArray<OhrtAboutRow *> *rows, NSDictionary *fea
     [rows addObject:row];
 }
 
+// The predicted times as Instagram keeps them: a fixed block of twelve
+// numbers, seconds since 1970, and when they were loaded. Read only when
+// the block is laid out as this was written for.
+static NSArray<NSNumber *> *OhrtAboutBestTimes(NSTimeInterval *loaded) {
+    typedef struct {
+        long long timestamps[12];
+        double loadTimestamp;
+        char state;
+        long long type;
+    } OhrtBestTimes;
+    id store = OhrtCallValue(OhrtCurrentSession(), @"btpTimestampsStore");
+    NSMutableArray<NSNumber *> *times = [NSMutableArray array];
+    for (NSString *name in @[ @"_storiesPredictedTimestampsInfo", @"_feedPredictedTimestampsInfo" ]) {
+        Ivar ivar = store ? class_getInstanceVariable([store class], name.UTF8String) : NULL;
+        const char *type = ivar ? ivar_getTypeEncoding(ivar) : NULL;
+        if (!type || strcmp(type, "{?=\"timestamps\"[12q]\"loadTimestamp\"d\"state\"c\"type\"q}") != 0) continue;
+        OhrtBestTimes kept;
+        memcpy(&kept, (const char *)(__bridge void *)store + ivar_getOffset(ivar), sizeof(kept));
+        BOOL any = NO;
+        for (int at = 0; at < 12; at++) {
+            // Anything not a date of this century is not a time.
+            if (kept.timestamps[at] < 946684800 || kept.timestamps[at] > 4102444800) continue;
+            [times addObject:@(kept.timestamps[at])];
+            any = YES;
+        }
+        if (any && loaded && kept.loadTimestamp > *loaded) *loaded = kept.loadTimestamp;
+    }
+    return [[[NSSet setWithArray:times] allObjects] sortedArrayUsingSelector:@selector(compare:)];
+}
+
 static NSString *OhrtAboutBestieMeaning(NSUInteger scored) {
     return [NSString stringWithFormat:@"The score Meta's servers give this account for how close you are, out of 100. It's one of %@ accounts scored for you, and Insta\u2060gram uses the scores to "
                                       @"order its suggestions, such as who to add to close friends and who to message. Shown are the first three places, then eight more spread down to the last. "
@@ -793,12 +855,45 @@ static NSString *OhrtAboutBestieMeaning(NSUInteger scored) {
     NSDictionary *f = OhrtAboutFeatures(&when);
     NSMutableArray<OhrtAboutBox *> *boxes = [NSMutableArray array];
 
-    NSString *asked = self.nextOpen ? @"instagram expects you to reopen the app in" : self.nextOpenFailed ? @"casper gave no estimate on this phone" : @"asking casper when you'll open the app next";
-    OhrtAboutBox *next = OhrtAboutBoxed(OhrtAboutKindLine, @"next open", @"casper, a model on this phone", @[ OhrtAboutPlain(asked, self.nextOpen ?: @"",
-                              @"Insta\u2060gram's guess at how long until you next open the app. The model runs on your phone and looks at how often you opened the app over the last hour up to the "
-                              @"last week, how long you stayed, the time of day, your unread messages and which screen you last left from. Insta\u2060gram uses the guess to decide when to "
-                              @"fetch new posts in the background.\n\nInsta\u2060gram's name for it: IGCasper, minutes_to_next_target_event") ]);
-    next.under = @"worked out from when and how often you open it";
+    // The times of day Instagram's servers predict you will open stories.
+    NSDate *now = [NSDate date];
+    NSTimeInterval loaded = 0;
+    NSArray<NSNumber *> *times = OhrtAboutBestTimes(&loaded);
+    static NSDateFormatter *clock;
+    if (!clock) {
+        clock = [NSDateFormatter new];
+        clock.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+        clock.dateFormat = @"h:mma";
+    }
+    NSDate *firstHour = [[NSCalendar currentCalendar] dateBySettingHour:[[NSCalendar currentCalendar] component:NSCalendarUnitHour fromDate:now] minute:0 second:0 ofDate:now options:0] ?: now;
+    NSMutableArray<NSNumber *> *hours = [NSMutableArray array];
+    for (int at = 0; at < 24; at++) [hours addObject:@NO];
+    NSNumber *soonest = nil;
+    for (NSNumber *time in times) {
+        NSTimeInterval ahead = time.doubleValue - now.timeIntervalSince1970;
+        if (ahead <= 0) continue;
+        if (!soonest) soonest = time;
+        NSInteger at = (NSInteger)floor((time.doubleValue - firstHour.timeIntervalSince1970) / 3600);
+        if (at >= 0 && at < 24) hours[at] = @YES;
+    }
+    NSString *about = @"The times Insta\u2060gram's servers predict you will next open stories. They are sent to the phone and replaced often, and the app uses them to load stories "
+                      @"ahead of you. They are also handed to Casper, the model on your phone that guesses when you will next open the app. Each block is an hour, starting with "
+                      @"this one, and is lit when a predicted time falls in it. What the times are for is read from the app's code. Insta\u2060gram doesn't say.\n\n"
+                      @"Insta\u2060gram's name for it: storiesPredictedTimestampsInfo";
+    NSString *expected = @"";
+    if (soonest) {
+        long long minutes = llround((soonest.doubleValue - now.timeIntervalSince1970) / 60);
+        NSString *ahead = minutes >= 60 ? [NSString stringWithFormat:@"%lldh %lldm", minutes / 60, minutes % 60] : [NSString stringWithFormat:@"%lldm", minutes];
+        expected = [NSString stringWithFormat:@"%@  in %@", [clock stringFromDate:[NSDate dateWithTimeIntervalSince1970:soonest.doubleValue]], ahead];
+    }
+    OhrtAboutBox *next = OhrtAboutBoxed(OhrtAboutKindDay, @"next open", nil, @[ OhrtAboutPlain(soonest ? @"instagram expects you next at" : @"instagram has sent no predicted times yet", expected, about) ]);
+    next.hours = hours;
+    next.firstHour = firstHour;
+    if (times.count) {
+        long long since = llround(now.timeIntervalSince1970 - loaded);
+        NSString *ago = loaded <= 0 || since < 0 ? @"" : since < 90 ? [NSString stringWithFormat:@" %llds ago", since] : since < 5400 ? [NSString stringWithFormat:@" %lldm ago", since / 60] : [NSString stringWithFormat:@" %lldh ago", since / 3600];
+        next.note = [NSString stringWithFormat:@"%lu times, sent by instagram%@", (unsigned long)times.count, ago];
+    }
     [boxes addObject:next];
 
     NSMutableArray<OhrtAboutRow *> *rows = [NSMutableArray array];
@@ -926,39 +1021,6 @@ static NSString *OhrtAboutBestieMeaning(NSUInteger scored) {
         OhrtTry(@"about", ^{
             if ([strongSelf besties:NULL].count || strongSelf.waited >= kOhrtAboutScoresWait) [strongSelf build];
             else [strongSelf waitForScores];
-        });
-    });
-}
-
-// The model answers with a whole number of minutes and the same as a
-// fraction. If it has not answered in a few seconds, the row says so.
-- (void)askNextOpen {
-    id casper = OhrtCall(OhrtCurrentSession(), @"casper");
-    SEL estimate = NSSelectorFromString(@"estimateMinutesToNextTargetEventAfterBackground:completionQueue:");
-    if (![casper respondsToSelector:estimate]) {
-        self.nextOpen = nil;
-        self.nextOpenFailed = YES;
-        return;
-    }
-    NSUInteger ask = ++self.asks;
-    __weak OhrtAboutViewController *weakSelf = self;
-    void (^answer)(long long, float) = ^(long long whole, float minutes) {
-        OhrtAboutViewController *strongSelf = weakSelf;
-        if (!strongSelf || !(minutes >= 0)) return;
-        long long rounded = llround(minutes);
-        strongSelf.nextOpen = rounded >= 60 ? [NSString stringWithFormat:@"%lldh %lldm", rounded / 60, rounded % 60] : [NSString stringWithFormat:@"%lldm", rounded];
-        strongSelf.nextOpenFailed = NO;
-        OhrtTry(@"about", ^{
-            [strongSelf build];
-        });
-    };
-    ((void (*)(id, SEL, id, id))objc_msgSend)(casper, estimate, (id)answer, dispatch_get_main_queue());
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        OhrtAboutViewController *strongSelf = weakSelf;
-        if (!strongSelf || strongSelf.asks != ask || strongSelf.nextOpen) return;
-        strongSelf.nextOpenFailed = YES;
-        OhrtTry(@"about", ^{
-            [strongSelf build];
         });
     });
 }
